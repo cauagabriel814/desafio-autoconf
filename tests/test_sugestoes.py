@@ -33,6 +33,7 @@ def test_marca_pedida_continua_quando_ele_so_diz_o_valor():
         assert "cabe nesse valor" in s2 and "BYD Dolphin" in s2 and "Kwid" not in s2
         # um carro só: avisa, de forma natural, que é o único, e não compara ("o mais novinho" não faz sentido)
         assert "ÚNICO" in s and "NÃO diga" in s and "mais novo, menos km" not in s
+        assert "FRASE corrida" in s  # um carro só vira frase, não lista com traço
         s_pedido = sugestoes({"modelos_interesse": ["BYD"]}, ["BYD"])
         assert "ÚNICO" in s_pedido and "BYD Dolphin" in s_pedido
         # o BYD já foi mostrado e ele só disse o valor: não manda a lista de novo, retoma em palavras
@@ -143,6 +144,13 @@ def test_lista_sem_tracinho_vira_lista():
          "Nissan Kicks SV 2022 · 40.000 km · R$ 98.900\n\nQual o seu orçamento?")
     assert limpar_formatacao(t) == ("Olha só o que temos:\n\n- Renault Duster Iconic 2021 · 55.000 km · R$ 84.900\n"
                                     "- Nissan Kicks SV 2022 · 40.000 km · R$ 98.900\n\nQual o seu orçamento?")
+
+
+def test_um_carro_so_fica_como_frase_nao_como_lista():
+    from app.agente.grafo import limpar_formatacao
+
+    t = "Temos o BYD Dolphin 2024, com 5 km, por R$ 89.000. Até quanto você pensa em investir?"
+    assert limpar_formatacao(t) == t  # não ganha "- " na frente
 
 
 def test_passar_para_vendedor_tem_jeito_humano_por_motivo():
