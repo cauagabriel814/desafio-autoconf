@@ -1,5 +1,7 @@
 """Sugestões de carros montadas pelo código (sem chamar o modelo)."""
 
+import re
+
 from app.agente.grafo import sugestoes
 
 
@@ -359,3 +361,18 @@ def test_marca_pedida_depois_do_valor_respeita_o_limite_de_preco():
     # modelo específico: mostra mesmo acima do valor (ele perguntou por aquele carro)
     s4 = sugestoes({"preco_max": 100000, "modelos_interesse": ["T-Cross"]}, ["T-Cross"])
     assert "T-Cross" in s4 and "118.500" in s4
+
+
+def test_marca_vinda_da_foto_lista_so_a_marca_dentro_do_valor():
+    # foto de um Chevrolet com 100 mil: só os Chevrolet que cabem (Onix LT, Cruze, Onix Plus), nada de outras marcas
+    s = sugestoes({"preco_max": 100000, "modelos_interesse": ["Chevrolet"]}, ["Chevrolet"])
+    assert "Onix LT" in s and "Cruze" in s and "Onix Plus" in s
+    assert "Kwid" not in s and "HB20" not in s and "S10" not in s  # S10 é Chevrolet mas custa R$ 189.900
+
+
+def test_descricao_da_foto_nao_conta_como_pedido_de_lista():
+    from app.agente.grafo import _PEDIU_LISTA
+
+    foto = "[Cliente enviou uma imagem: A imagem mostra um carro Chevrolet, em uma revenda de veículos.]"
+    assert _PEDIU_LISTA.search(foto)  # "mostra" casaria com "me mostra os carros"...
+    assert not _PEDIU_LISTA.search(re.sub(r"\[Cliente enviou[^\]]*\]", " ", foto))  # ...mas a descrição é removida antes

@@ -494,7 +494,8 @@ def _construir(lead_id: int, callbacks: list):
         novo = ficha_mod.mudou_interesse(antes, ext)
         ficha_agora = repo.obter_lead(lead_id).ficha or {}
         tem_valor = bool(ficha_agora.get("preco_max") or ficha_agora.get("preco_min"))
-        pediu_lista = bool(_PEDIU_LISTA.search(ultima.texto))
+        # A descrição da foto ("A imagem mostra um carro...") não é o cliente pedindo "me mostra os carros"
+        pediu_lista = bool(_PEDIU_LISTA.search(re.sub(r"\[Cliente enviou[^\]]*\]", " ", ultima.texto)))
         # Pediu para ver ("quais vocês têm?") e já sabemos o que procura: mostra a lista, mesmo sem nada novo
         if pediu_lista and not novo and (ficha_agora.get("tipo_interesse") or tem_valor):
             novo = True
