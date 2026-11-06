@@ -82,6 +82,34 @@ async def criar_instancia() -> None:
         log.warning("Evolution API indisponível ao criar a instância")
 
 
+async def garantir_instancia(tentativas: int = 60, espera: float = 3.0) -> bool:
+    """Na subida do app: cria a instância padrão na Evolution (espera ela ficar de pé). Falta só ler o QR code.
+
+    Devolve True se a instância existe no fim (criada agora ou já existente).
+    """
+    if not settings.evolution_api_key or not settings.evolution_instance:
+        return False
+    for _ in range(tentativas):
+        try:
+            await _post(
+                "/instance/create",
+                {"instanceName": settings.evolution_instance, "integration": "WHATSAPP-BAILEYS", "qrcode": True},
+            )
+            log.info("Instância '%s' criada na Evolution: leia o QR code em /painel/whatsapp", settings.evolution_instance)
+            return True
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (400, 403, 409):  # já existe
+                log.info("Instância '%s' já existe na Evolution", settings.evolution_instance)
+                return True
+            log.warning("Evolution respondeu %s ao criar a instância", e.response.status_code)
+        except Exception:
+            pass  # Evolution ainda subindo: tenta de novo
+        await asyncio.sleep(espera)
+    log.warning("Não consegui criar a instância '%s': Evolution fora do ar? (use /painel/whatsapp depois)",
+                settings.evolution_instance)
+    return False
+
+
 async def estado_instancia() -> str:
     """open | connecting | close | indisponível (instância não existe ou Evolution fora do ar)."""
     try:
