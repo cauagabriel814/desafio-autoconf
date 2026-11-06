@@ -150,6 +150,15 @@ def extrair(texto_cliente: str, contexto: str, callbacks: list | None = None) ->
 # ---------- Checklist ----------
 
 # (campo, rótulo, como perguntar, preenchido?) na ordem em que o agente deve perguntar
+def carro_escolhido(f: dict) -> dict | None:
+    """O UM carro do estoque que o cliente escolheu (ex.: "o Onix Plus Premier 2023"). Marca com vários carros não conta."""
+    for m in f.get("modelos_interesse") or []:
+        achados = [c for c in repo.buscar_carros(texto=m) if repo.combina_texto(m, c)]
+        if len(achados) == 1:
+            return achados[0]
+    return None
+
+
 def _itens(f: dict) -> list[tuple[str, str, str, object]]:
     reais = lambda v: f"R$ {v:,}".replace(",", ".")  # noqa: E731
     faixa = None
@@ -160,6 +169,9 @@ def _itens(f: dict) -> list[tuple[str, str, str, object]]:
                 f"até {reais(f['preco_max'])}" if f.get("preco_max") else "",
             ) if p
         )
+    elif (escolhido := carro_escolhido(f)):
+        # Escolheu um carro sem dizer o valor: o preço dele já é a faixa, não pergunta de novo
+        faixa = f"carro escolhido: {escolhido['nome']} ({reais(escolhido['preco'])})"
     # Cada item: (campo, rótulo, como perguntar, valor completo ou None, parcial: o que já se sabe)
     # Item parcial = o cliente respondeu só uma parte; a próxima pergunta é a parte que falta.
 
@@ -287,6 +299,8 @@ def situacao_campos(ficha: dict) -> list[dict]:
         modelo = "sem preferência (qualquer um que caiba no valor)"
     faixa = " ".join(p for p in (f"de {reais(f['preco_min'])}" if f.get("preco_min") else "",
                                  f"até {reais(f['preco_max'])}" if f.get("preco_max") else "") if p)
+    if not faixa and (escolhido := carro_escolhido(f)):
+        faixa = f"carro escolhido: {escolhido['nome']} ({reais(escolhido['preco'])})"
     pagamento = None if f.get("quer_financiar") is None else ("financiado" if f["quer_financiar"] else "à vista")
     if f.get("troca_tem") is False:
         troca = "não tem"
@@ -399,7 +413,7 @@ def qualificado(ficha: dict) -> bool:
     if ficha.get("intencao") == "vender":
         return bool(ficha.get("troca_modelo") and ficha.get("troca_ano")) and tem_visita and not pendentes(ficha)
     tem_modelo = bool(ficha.get("tipo_interesse") or ficha.get("modelos_interesse") or ficha.get("sem_preferencia"))
-    tem_valor = bool(ficha.get("preco_max") or ficha.get("preco_min"))
+    tem_valor = bool(ficha.get("preco_max") or ficha.get("preco_min") or carro_escolhido(ficha))
     tem_pagamento = ficha.get("quer_financiar") is not None
     return tem_modelo and tem_valor and tem_pagamento and tem_visita and not pendentes(ficha)
 
