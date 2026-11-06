@@ -286,3 +286,48 @@ def test_orcamento_abaixo_de_tudo_sugere_o_mais_proximo():
 def test_tipo_certo_acima_do_orcamento_sugere_o_mais_barato_do_tipo():
     s = sugestoes({"tipo_interesse": "Picape", "preco_max": 60000})
     assert "Nenhum carro" in s and "Toro" in s and "Kwid" not in s
+
+
+def test_nenhum_carro_no_valor_diz_isso_e_mostra_os_mais_perto():
+    s = sugestoes({"preco_max": 20000})
+    assert "nesse valor não temos nada" in s and "Kwid" in s
+    assert "consegue chegar perto desse valor" in s
+
+
+def test_modelo_que_nao_temos_e_nada_parecido_no_valor():
+    # Hilux até 50 mil: as picapes do estoque ficam bem acima do valor, e a resposta tem que dizer isso
+    s = sugestoes({"tipo_interesse": "Picape", "preco_max": 50000}, ["Hilux"])
+    assert "ACIMA do valor" in s and "Toro" in s
+    # com valor que cabe, segue oferecendo os que cabem
+    s2 = sugestoes({"tipo_interesse": "Picape", "preco_max": 200000}, ["Hilux"])
+    assert "ACIMA do valor" not in s2 and "Toro" in s2
+
+
+def test_modelo_que_nao_existe_nao_vira_outro_da_mesma_marca():
+    # "Jeep Renegade" não é o Compass: tem que dizer que não temos, não apresentar o Compass como o que ele pediu
+    s = sugestoes({"modelos_interesse": ["Jeep Renegade"]}, ["Jeep Renegade"])
+    assert "NÃO está no estoque" in s and "Renegade" in s and "ÚNICO" not in s
+    # marca sozinha e modelo parcial continuam batendo
+    assert "BYD Dolphin" in sugestoes({"modelos_interesse": ["BYD"]}, ["BYD"])
+    assert "Nissan Kicks" in sugestoes({"modelos_interesse": ["Kicks"]}, ["Kicks"])
+    assert "Corolla Cross" in sugestoes({"modelos_interesse": ["Corolla"]}, ["Corolla"])
+
+
+def test_modelo_com_ano_do_contexto_ainda_acha_o_carro():
+    # a extração às vezes devolve "VW T-Cross Comfortline 2023" (nome completo, com ano)
+    s = sugestoes({"tipo_interesse": "SUV"}, ["VW T-Cross Comfortline 2023"])
+    assert "T-Cross" in s and "NÃO está no estoque" not in s
+
+
+def test_modelo_especifico_responde_direto_sem_dizer_que_e_o_unico():
+    # "Quanto tá o T-Cross?": são 7 SUVs na loja, então "é o único SUV" seria mentira; responde o preço dele
+    s = sugestoes({"tipo_interesse": "SUV"}, ["T-Cross"])
+    assert "responda direto" in s and "ÚNICO" not in s and "118.500" in s
+    # marca inteira com um carro só (BYD): aí sim é o único dela
+    assert "ÚNICO" in sugestoes({"modelos_interesse": ["BYD"]}, ["BYD"])
+
+
+def test_perguntou_o_preco_do_carro_que_ja_mostrou_responde_de_novo():
+    antes = ["- VW T-Cross Comfortline 2023 · 19.000 km · R$ 118.500\n\nE até quanto você pensa em investir?"]
+    s = sugestoes({"tipo_interesse": "SUV"}, ["VW T-Cross Comfortline 2023"], None, antes)
+    assert "JÁ mostrou" not in s and "118.500" in s  # ele nomeou o carro: o preço sai de novo

@@ -387,3 +387,20 @@ def test_motivo_da_transferencia_sempre_legivel_no_resumo(monkeypatch):
     assert r.startswith("Motivo da transferência: ") and "negociar" in r and r.endswith("Quer um SUV até 120 mil.")
     # sem motivo conhecido (resumo avulso): só o texto do modelo
     assert tools.gerar_resumo(l.id, "atendimento em andamento") == "Quer um SUV até 120 mil."
+
+
+def test_sem_preferencia_conta_como_resposta_do_interesse():
+    f = {"preco_max": 100000, "sem_preferencia": True}
+    assert pendentes(f) == ["pagamento", "visita"]
+    assert "sem preferência" in checklist(f)
+
+
+def test_sem_dados_quando_nao_da_para_buscar_no_estoque():
+    from app.agente.ficha import sem_dados
+
+    assert sem_dados({"nao_informado": ["faixa_preco", "interesse"]})
+    assert sem_dados({"nao_informado": ["faixa_preco"], "sem_preferencia": True})  # "tanto faz" e sem valor
+    assert sem_dados({"perguntas_feitas": {"faixa_preco": 2, "interesse": 2}})      # perguntou 2x, nada
+    assert not sem_dados({"nao_informado": ["faixa_preco"], "tipo_interesse": "SUV"})  # disse o tipo: dá para listar
+    assert not sem_dados({"preco_max": 80000, "nao_informado": ["interesse"]})  # tem valor: lista o que cabe
+    assert not sem_dados({"intencao": "vender", "nao_informado": ["faixa_preco", "interesse"]})
