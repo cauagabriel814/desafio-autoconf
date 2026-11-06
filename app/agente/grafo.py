@@ -131,6 +131,26 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
         return (f"MOSTRE AGORA, nesta mensagem, o(s) carro(s) que o cliente pediu:\n{lista}\n"
                 f"{destaques(achados[:MAX_CARROS])}\n{FECHO_SUGESTAO}")
 
+    # O cliente já pediu um carro ou marca (ex.: "um BYD") e agora só afinou o valor: a lista continua sendo DELE,
+    # não de todo o estoque até aquele preço
+    if not modelos and (pmax or pmin):
+        do_interesse: list[dict] = []
+        for m in ficha.get("modelos_interesse") or []:
+            do_interesse += [c for c in repo.buscar_carros(texto=m, tipo=tipo) if c not in do_interesse]
+        if do_interesse:
+            cabem = [c for c in do_interesse if (not pmax or c["preco"] <= pmax) and (not pmin or c["preco"] >= pmin)]
+            if cabem:
+                lista = "\n".join(_linha_carro(c) for c in sorted(cabem, key=lambda c: c["preco"])[:MAX_CARROS])
+                return (f"O cliente já pediu {', '.join(ficha['modelos_interesse'])} e agora disse o valor. MOSTRE AGORA, "
+                        "nesta mensagem, só os carros que ele pediu e que cabem no valor (não ofereça outros modelos "
+                        f"nem outras marcas):\n{lista}\n{destaques(cabem[:MAX_CARROS])}\n{FECHO_SUGESTAO}")
+            if not tipo:  # tem o que ele quer no estoque, mas fora do valor: diz isso e mostra o mais perto
+                alvo = pmax or pmin
+                perto = sorted(sorted(do_interesse, key=lambda c: abs(c["preco"] - alvo))[:3], key=lambda c: c["preco"])
+                lista = "\n".join(_linha_carro(c) for c in perto)
+                return (f"Nenhum {', '.join(ficha['modelos_interesse'])} do estoque cabe nesse valor. Diga isso com "
+                        f"clareza e mostre estes, que são os mais perto do valor dele:\n{lista}\n{FECHO_SUGESTAO}")
+
     parecidos = repo.buscar_carros(tipo=tipo, preco_max=pmax, preco_min=pmin) if (tipo or pmax or pmin) else []
     parecidos.sort(key=lambda c: c["preco"])  # sempre do mais barato ao mais caro (o mais perto do teto fica no fim)
     achados.sort(key=lambda c: c["preco"])
