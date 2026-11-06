@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arquitetura Agente Pré-venda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: blueprint vertical — cada etapa é uma faixa (rótulo à esquerda, nós à direita), ligadas por conectores; camadas transversais no fim */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #16202b;
+  --muted: #5b6878;
+  --line: #cfd7e0;
+  --accent: #0f6e7a;
+  --accent-soft: #e2f1f2;
+  --suggest: #e6c12e;
+  --suggest-soft: #fff9db;
+  --stop: #a83232;
+  --stop-soft: #fbe9e9;
+  --ok: #2d7a3e;
+  --ok-soft: #e6f3e8;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #17212a; --fg: #e3e9ef; --muted: #93a1b0; --line: #2c3a47;
+    --accent: #4fc0cc; --accent-soft: #143238; --suggest: #e6c12e; --suggest-soft: #2e2a10;
+    --stop: #ef8a8a; --stop-soft: #3a1c1c; --ok: #79c98a; --ok-soft: #17301d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #17212a; --fg: #e3e9ef; --muted: #93a1b0; --line: #2c3a47;
+  --accent: #4fc0cc; --accent-soft: #143238; --suggest: #e6c12e; --suggest-soft: #2e2a10;
+  --stop: #ef8a8a; --stop-soft: #3a1c1c; --ok: #79c98a; --ok-soft: #17301d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header h1 { font-size: 26px; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); background: var(--surface); }
+.sw.sug { background: var(--suggest-soft); border: 1px dashed var(--suggest); }
+.sw.stop { background: var(--stop-soft); border-color: var(--stop); }
+.sw.ok { background: var(--ok-soft); border-color: var(--ok); }
+
+.flow { display: flex; flex-direction: column; }
+.stage {
+  display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+}
+.stage-label { display: flex; flex-direction: column; gap: 4px; }
+.stage-label .n { font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: 0.06em; }
+.stage-label h2 { font-size: 16px; margin: 0; }
+.stage-label p { margin: 0; font-size: 12px; color: var(--muted); }
+.connector { height: 28px; display: flex; justify-content: center; position: relative; }
+.connector::before { content: ""; width: 2px; background: var(--accent); height: 100%; }
+.connector::after {
+  content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid var(--accent);
+}
+.connector small {
+  position: absolute; left: calc(50% + 12px); top: 50%; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+
+.seq { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.seq > .arrow { align-self: center; color: var(--accent); font-weight: 700; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.node {
+  flex: 1 1 190px; min-width: 0; min-height: 72px;
+  border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.node h3 { font-size: 13.5px; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.node p, .node li { margin: 0; font-size: 12.5px; color: var(--muted); }
+.node ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 2px; }
+.node code, .env code, .note code { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
+.tag {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); background: var(--surface);
+}
+.tag.db { border-color: var(--accent); color: var(--accent); }
+.node.sug { background: var(--suggest-soft); border: 1px dashed var(--suggest); }
+.tag:not(.db) { background: var(--suggest); border-color: var(--suggest); color: #1f1a05; }
+.sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 12px 0 6px; }
+.sub:first-child { margin-top: 0; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.toc a {
+  font-family: var(--font-mono); font-size: 12px; color: var(--accent); text-decoration: none;
+  border: 1px solid var(--accent); border-radius: 4px; padding: 3px 10px;
+}
+.toc a:hover, .toc a:focus-visible { background: var(--accent-soft); }
+.part-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px;
+  border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-top: 20px;
+}
+.part-head .n { font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: 0.08em; }
+.part-head h2 { margin: 0; font-size: 22px; }
+.part-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.end {
+  align-self: center; font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 999px; padding: 6px 14px; background: var(--accent-soft); text-align: center;
+}
+.navmap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.navrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 16px; }
+.navside { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px dashed var(--line); border-radius: 6px; }
+.who { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.screen {
+  display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 20px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+}
+.screen.sug { background: var(--suggest-soft); border: 1px dashed var(--suggest); }
+.wf {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 10px;
+  display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted);
+}
+.wf-top { font-weight: 600; color: var(--fg); border-bottom: 1px solid var(--line); padding-bottom: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.bub { max-width: 80%; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.bub.l { align-self: flex-start; }
+.bub.r { align-self: flex-end; background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.wf-input { display: flex; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; background: var(--surface); margin-top: 4px; }
+.wf-input span:last-child { color: var(--accent); font-weight: 600; }
+.wf-box { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; background: var(--surface); }
+.wf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.wf-table { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface); }
+.tr { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; padding: 4px 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.tr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr.th { border-top: 0; font-weight: 600; color: var(--fg); background: var(--bg); }
+.pill { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-weight: 400; background: var(--surface); text-align: center; }
+.pill.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.info-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.info-head .n { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.info-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 6px; }
+.info-head code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.info .lead { margin: 0; color: var(--muted); max-width: 70ch; }
+.info dl { margin: 0; display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 6px 12px; font-size: 13px; }
+.info dt { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding-top: 2px; }
+.info dd { margin: 0; }
+.info code { font-family: var(--font-mono); font-size: 11.5px; }
+@media (max-width: 720px) {
+  .navrow, .screen { grid-template-columns: 1fr; }
+  .info dl { grid-template-columns: 1fr; }
+}
+/* Grafo do agente (SVG): cores pelos tokens, funciona no claro e no escuro */
+.grafo-sec { grid-template-columns: 170px minmax(0, 1fr); }
+.grafo-corpo { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.g-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.g-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--line); background: var(--bg); }
+.lg-llm { background: var(--accent); border-color: var(--accent); }
+.lg-cod { background: var(--surface); border-color: var(--fg); }
+.lg-tool { background: var(--accent-soft); border-color: var(--accent); border-style: dashed; }
+.lg-db { border-radius: 50% / 30%; background: var(--surface); border-color: var(--muted); }
+.lg-linha { width: 26px; height: 0; border-top: 2px solid var(--accent); }
+.lg-tracejada { border-top-style: dashed; }
+.grafo-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.grafo { width: 100%; min-width: 780px; height: auto; display: block; }
+.g-no rect { stroke-width: 1.5; }
+.g-cod rect { fill: var(--surface); stroke: var(--fg); stroke-opacity: .55; }
+.g-cod-forte rect { stroke: var(--fg); stroke-opacity: .9; stroke-dasharray: 6 3; }
+.g-llm rect { fill: var(--accent); stroke: var(--accent); }
+.g-tool rect { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 5 3; }
+.g-nota rect { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+.g-db path, .g-db ellipse { fill: var(--surface); stroke: var(--muted); stroke-width: 1.5; }
+.g-nome { font-family: var(--font-mono); font-size: 13px; font-weight: 600; fill: var(--fg); }
+.g-nome-llm { fill: var(--surface); font-size: 14px; }
+.g-desc { font-family: var(--font-body); font-size: 11.5px; fill: var(--muted); }
+.g-desc-llm { fill: var(--surface); opacity: .9; }
+.g-forte { fill: var(--fg); font-weight: 600; }
+.g-nota-t { font-family: var(--font-body); font-size: 12px; font-weight: 600; fill: var(--fg); }
+.g-sep { stroke: var(--line); stroke-width: 1; }
+.g-num { fill: var(--fg); fill-opacity: .12; }
+.g-num-t { font-family: var(--font-mono); font-size: 11px; font-weight: 600; fill: var(--fg); }
+.g-num-llm { fill: var(--surface); fill-opacity: .25; }
+.g-num-t-llm { fill: var(--surface); }
+.g-ponta { fill: var(--fg); }
+.g-ponta-t { font-family: var(--font-mono); font-size: 8.5px; fill: var(--surface); font-weight: 600; }
+.g-l { stroke: var(--accent); stroke-width: 2; fill: none; }
+.g-c { stroke-dasharray: 6 4; }
+.g-n { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 2 3; }
+.g-seta { fill: var(--accent); }
+.g-seta-n { fill: var(--muted); }
+.g-pill { fill: var(--surface); stroke: var(--accent); stroke-width: 1; }
+.g-pill-forte { fill: var(--accent-soft); }
+.g-pill-t { font-family: var(--font-mono); font-size: 10.5px; fill: var(--accent); }
+.g-exemplo { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--bg); }
+.g-exemplo ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.g-exemplo code { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.infra { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 2fr); gap: 12px; align-items: start; }
+.infra .group { display: flex; flex-direction: column; gap: 8px; }
+.infra-sub { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+.links .node { min-height: 0; }
+@media (max-width: 900px) { .infra { grid-template-columns: 1fr; } }
+.stack-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.stack-scroll { overflow-x: auto; }
+.stack { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
+.stack th { text-align: left; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; padding: 6px 10px; border-bottom: 2px solid var(--accent); }
+.stack td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.stack td:first-child { color: var(--muted); width: 22%; }
+.stack td:nth-child(2) { width: 34%; }
+.stack td:last-child { color: var(--muted); }
+.stack tr.grp td { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); background: var(--accent-soft); padding-block: 5px; border-bottom: 0; }
+.stack code { font-family: var(--font-mono); font-size: 11.5px; }
+.orch { display: flex; flex-direction: column; }
+.orch-top { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1.4fr) 28px minmax(0, 1fr); align-items: stretch; }
+.orch-top > .arrow { align-self: center; text-align: center; color: var(--accent); font-weight: 700; }
+.node.agent { border: 2px solid var(--accent); background: var(--accent-soft); }
+.node.agent h3 { color: var(--accent); }
+.orch-stem { height: 40px; position: relative; display: flex; justify-content: center; }
+.orch-stem::before { content: ""; width: 2px; background: var(--accent); height: 100%; }
+.orch-stem span {
+  position: absolute; left: calc(50% + 10px); top: 50%; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent); white-space: nowrap;
+}
+.orch-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; position: relative; padding-top: 18px; }
+.orch-tools::before { content: ""; position: absolute; top: 0; left: calc((100% - 20px) / 6); right: calc((100% - 20px) / 6); height: 2px; background: var(--accent); }
+.orch-tools > .node { position: relative; }
+.orch-tools > .node::before { content: ""; position: absolute; top: -18px; left: 50%; width: 2px; height: 18px; background: var(--accent); }
+@media (max-width: 720px) {
+  .orch-top { grid-template-columns: 1fr; }
+  .orch-top > .arrow { transform: rotate(90deg); }
+  .orch-tools { grid-template-columns: 1fr; padding-top: 0; }
+  .orch-tools::before, .orch-tools > .node::before { display: none; }
+}
+.steps { display: flex; flex-direction: column; }
+.step { display: grid; grid-template-columns: minmax(0, 1fr) 96px 200px; gap: 0; align-items: stretch; }
+.branch {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+}
+.branch::before {
+  content: ""; position: absolute; left: 6px; right: 12px; top: 50%; height: 2px; background: var(--accent);
+}
+.branch::after {
+  content: ""; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid var(--accent);
+}
+.branch span { position: relative; top: -11px; background: var(--surface); padding: 0 4px; color: var(--accent); }
+.step .node { min-height: 72px; justify-content: center; }
+.step-arrow { font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 500; height: 26px; display: flex; align-items: center; padding-left: 14px; }
+.exit {
+  display: flex; align-items: center; min-height: 72px;
+  font-size: 12.5px; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 10px 12px;
+}
+@media (max-width: 720px) {
+  .step { grid-template-columns: 1fr; }
+  .branch { height: 30px; justify-content: flex-start; padding-left: 14px; }
+  .branch::before, .branch::after { display: none; }
+  .branch span { top: 0; background: none; }
+  .branch span::before { content: "↓ "; }
+}
+.group { border: 1px solid var(--accent); border-radius: 8px; padding: 10px; background: var(--accent-soft); }
+.group + .merge + .node { border-color: var(--accent); }
+.merge { display: flex; align-items: center; justify-content: flex-start; gap: 8px; height: 26px; padding-left: 14px; color: var(--accent); font-weight: 500; font-size: 13px; }
+.merge small { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--muted); }
+.loop { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+
+.cross { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.cross .stage { grid-template-columns: 1fr; gap: 10px; }
+.env {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px;
+}
+.env pre {
+  margin: 0; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 12px; overflow-x: auto; line-height: 1.7;
+}
+.env pre .c { color: var(--muted); }
+.env pre .s { color: var(--accent); }
+h2.sec { font-size: 18px; margin: 0 0 10px; }
+.q { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; max-width: 75ch; }
+.q li { color: var(--fg); }
+.q li span { color: var(--muted); }
+
+@media (max-width: 720px) {
+  .stage { grid-template-columns: 1fr; gap: 10px; }
+  .seq { flex-direction: column; }
+  .seq > .arrow { transform: rotate(90deg); }
+  .env { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Agente de pré-venda Autoconf: arquitetura</h1>
+    <p>Duas partes: o agente, que vai do recebimento da mensagem até a resposta, e as telas, que mostram e usam o que o agente grava.</p>
+    <nav class="toc"><a href="#agente">A · Agente</a><a href="#telas">B · Telas</a><a href="#compartilhado">C · Compartilhado</a></nav>
+  </header>
+
+  <div class="part-head" id="agente"><span class="n">PARTE A</span><h2>Agente</h2><p>Do recebimento até a resposta. Não tem tela própria.</p></div>
+
+  <div class="flow">
+    <!-- 01 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 01</span><h2>Recebimento</h2><p>Canal abstrato: o agente não sabe de onde a mensagem veio</p></div>
+      <div>
+        <div class="group">
+          <p class="sub">Canal de entrada · qualquer uma das três origens</p>
+          <div class="grid">
+            <div class="node"><h3>WhatsApp (Evolution API)</h3><p>Webhook <code>POST /webhook/evolution</code>, evento <code>messages.upsert</code>. Responde 200 na hora e processa em segundo plano.</p></div>
+            <div class="node"><h3>Tela de chat (web)</h3><p><code>POST /chat</code> vindo da nossa página. Permite testar e demonstrar sem depender da Evolution.</p></div>
+            <div class="node"><h3>Terminal / simulador</h3><p>Chama o mesmo pipeline direto, para os testes automáticos.</p></div>
+          </div>
+        </div>
+        <div class="merge"><span>↓</span><small>todas convergem</small></div>
+        <div class="node"><h3>Montar payload (mensagem padrão)</h3><p><code>{ canal, cliente_id, message_id, tipo: texto|audio|imagem, conteudo, midia, recebido_em }</code></p><p>Daqui para a frente todas as etapas trabalham só com este formato. Para criar um canal novo (Telegram, Instagram), basta escrever um adaptador.</p></div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 02 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 02</span><h2>Filtros de entrada</h2><p>Decide se a mensagem é para o bot</p></div>
+      <div class="steps">
+        <div class="step">
+          <div class="node"><h3>0. Comando de teste?</h3><p>Só com <code>TEST=on</code> e só no WhatsApp (nunca na tela). <code>#reset</code> arquiva a conversa e começa uma nova no mesmo número. <code>#parar</code> faz o agente parar de responder (volta com <code>#thread</code>).</p></div>
+          <div class="branch"><span>sim</span></div>
+          <div class="exit"><b>Executa e confirma</b></div>
+        </div>
+        <div class="step-arrow">↓ não</div>
+        <div class="step">
+          <div class="node"><h3>1. Ignorar ruído</h3><p>Descarta <code>fromMe</code>, grupos e status. Deduplica por <code>message_id</code>.</p></div>
+          <div class="branch"><span>não passou</span></div>
+          <div class="exit"><b>Ignora</b></div>
+        </div>
+        <div class="step-arrow">↓ passou</div>
+        <div class="step">
+          <div class="node"><h3>2. Tem <code>#thread</code>?</h3><p>Filtro da palavra-chave. Só continua se ela vier na mensagem.</p></div>
+          <div class="branch"><span>não</span></div>
+          <div class="exit"><b>Ignora, não responde</b></div>
+        </div>
+        <div class="step-arrow">↓ sim</div>
+        <div class="step">
+          <div class="node"><h3>3. Já está com humano ou parado?</h3><p>Consulta o status do lead no banco. Se a conversa foi transferida ou recebeu <code>#parar</code>, o bot não responde. Um <code>#thread</code> religa a conversa parada.</p></div>
+          <div class="branch"><span>sim</span></div>
+          <div class="exit"><b>Só grava no histórico</b></div>
+        </div>
+        <div class="step-arrow">↓ não</div>
+        <div class="step">
+          <div class="node"><h3>4. Agrupar mensagens</h3><p>Espera uns 5s e junta as mensagens em sequência ("oi" + "quero um SUV" + áudio) em uma só entrada.</p></div>
+          <div class="branch ok"><span>pronto</span></div>
+          <div class="exit ok"><b>Segue para a etapa 03</b></div>
+        </div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 03 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 03</span><h2>Tratar o tipo</h2><p>Tudo vira texto e o canal de origem é guardado</p></div>
+      <div>
+        <div class="grid">
+          <div class="node"><h3>Texto</h3><p>Segue como veio.</p></div>
+          <div class="node"><h3>Áudio</h3><p>ogg/opus, webm, mp3, m4a, wav, flac (até 25 MB). Transcreve com <code>gpt-4o-mini-transcribe</code>, com as marcas e modelos do estoque como dica, e corrige nomes mal ouvidos ("bi uai di" → BYD).</p><p>Transcrição vazia ou com ruído: pede para repetir, sem travar.</p></div>
+          <div class="node"><h3>Imagem</h3><p>jpg, png, webp, gif (até 20 MB). O modelo de visão descreve a imagem (ex.: foto do carro da troca, print de anúncio).</p></div>
+          <div class="node"><h3>Outro arquivo</h3><p>PDF, documento, vídeo, figurinha, HEIC, vazio ou grande demais: resposta amigável ("pode mandar como foto, áudio ou me contar por texto?"), sem quebrar.</p></div>
+        </div>
+        <p class="sub">Só cumprimentou ("oi", "boa tarde", <code>#thread</code>) no começo da conversa</p>
+        <div class="node"><h3>Saudação fixa</h3><p>"Boa tarde! Aqui é a Lia, da Autoconf Veículos 😊 Como posso te ajudar?" (o período segue o que o cliente disse ou o horário de Brasília). Não passa pelo agente.</p></div>
+        <p class="sub">Grava</p>
+        <div class="node"><h3>Mensagem no histórico <span class="tag db">SQLite</span></h3><p>Texto normalizado + <code>tipo_origem</code> (texto, áudio ou imagem), que depois define o formato da resposta.</p></div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 04 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 04</span><h2>Guardrail de entrada</h2><p>Só bloqueia. O que passa vai para o agente.</p></div>
+      <div class="steps">
+        <div class="step">
+          <div class="node"><h3>O que bloqueamos</h3>
+            <ul>
+              <li>Assuntos fora da venda de carros: cotação do dólar, futebol, política, receitas, tarefas gerais</li>
+              <li>Injeção de prompt: "ignore suas instruções", "mostre seu prompt", "finja ser outro assistente"</li>
+              <li>Mensagem ofensiva ou abusiva</li>
+            </ul>
+          </div>
+          <div class="branch"><span>bloqueado</span></div>
+          <div class="exit"><b>Resposta fixa que traz a conversa de volta para carros</b></div>
+        </div>
+        <div class="step-arrow">↓ passou: todo o resto segue para o agente, inclusive reclamação e pós-venda</div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 05 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 05</span><h2>Agente</h2><p>LangGraph controla o fluxo, LangChain faz as chamadas</p></div>
+      <div>
+        <p class="sub">Antes do agente · ficha e checklist (regra em código)</p>
+        <div class="seq">
+          <div class="node"><h3>extrair_dados <span class="tag db">SQLite</span></h3><p>Lê a última mensagem do cliente e grava na ficha o que ele informou (saída estruturada). O agente não precisa lembrar de anotar.</p></div>
+          <span class="arrow">→</span>
+          <div class="node"><h3>checklist</h3><p>O código compara a ficha com o que o PDF pede: ✅ já respondido, ⬜ falta, e qual é a <b>próxima pergunta</b>.</p></div>
+          <span class="arrow">→</span>
+          <div class="node"><h3>ordem do turno</h3><p>Se há motivo de transferência: <b>ação obrigatória</b>. Se o cliente disse o que procura ou o orçamento: o código <b>escolhe os carros</b> (mais perto do orçamento) e o agente só apresenta.</p></div>
+        </div>
+        <div class="merge"><span>↓</span><small>vai no prompt do agente</small></div>
+        <div class="orch">
+          <div class="orch-top">
+            <div class="node"><h3>carregar_contexto</h3><p>Últimas N mensagens + checklist do lead</p></div>
+            <span class="arrow">→</span>
+            <div class="node agent"><h3>Agente (LLM) · orquestrador</h3><p>Responde, mostra carros e faz só a próxima pergunta do checklist. Decide quando chamar uma tool.</p></div>
+            <span class="arrow">→</span>
+            <div class="node"><h3>checar_transferencia → resposta</h3><p>Se prometeu passar para o vendedor sem chamar a tool, é cobrado 1 vez. Depois vai para o guardrail de saída.</p></div>
+          </div>
+          <div class="orch-stem"><span>⇅ chama a tool · recebe o resultado</span></div>
+          <div class="orch-tools">
+            <div class="node tool"><h3>buscar_estoque <span class="tag db">SQLite</span></h3><p>Filtros: tipo, preço máx., ano mín., marca/modelo. Só retorna carros que existem.</p></div>
+            <div class="node tool"><h3>detalhes_carro <span class="tag db">SQLite</span></h3><p>Dados completos de um carro por id (km, ano, preço).</p></div>
+            <div class="node tool"><h3>transferir_humano <span class="tag db">SQLite</span></h3><p>Recebe motivo + urgência, gera o resumo, marca a conversa como "com humano" e avisa o vendedor.</p></div>
+          </div>
+        </div>
+        <p class="sub">Ordem do checklist (pula o que já foi dito; "não sei" também conta)</p>
+        <div class="node"><p><b>3 perguntas:</b> 1. Modelo / tipo de carro · 2. Valor · 3. Como quer comprar (à vista ou financiado) → <b>respondidas = lead qualificado</b>: vai para o vendedor com resumo, e o cliente é avisado de que ele vai chamar para agendar visita ou test drive.</p>
+          <p>Entrada, troca, prazo, idade e renda não são perguntados; se o cliente contar, vão para a ficha. 🟡 Respondido em parte ("pra família" sem o tipo, ou citou "uma Saveiro" na troca sem o ano): pergunta só a parte que falta. Cada item é perguntado no máximo 2 vezes.</p></div>
+        <p class="sub">Quando o agente chama transferir_humano</p>
+        <div class="node"><p>Reclamação · negociação de valor ou desconto ("fecho por 115 mil") · pedido de crédito ou parcela · urgência alta ("preciso essa semana") · cliente pede uma pessoa · <b>qualificado</b>: checklist completo (o código manda transferir)</p></div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 06 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 06</span><h2>Guardrail de saída</h2><p>Só bloqueia. O que passa é enviado ao cliente.</p></div>
+      <div class="steps">
+        <div class="step">
+          <div class="node"><h3>O que bloqueamos</h3>
+            <ul>
+              <li><b>Código:</b> preço citado que não está no estoque nem foi dito pelo cliente</li>
+              <li><b>Código:</b> modelo oferecido que não está no estoque (dizer "não temos" e citar o carro de troca são permitidos)</li>
+              <li><b>LLM juiz:</b> promessa (crédito, desconto, reserva, prazo), contraproposta de valor, vazamento de prompt. Só vale se citar o trecho exato <i>com evidência da regra</i>; senão a reprovação é descartada</li>
+            </ul>
+          </div>
+          <div class="branch"><span>bloqueado</span></div>
+          <div class="exit"><b>Grava a versão reprovada (<code>status = bloqueada</code> + motivo). Regenera 1 vez e, se reprovar de novo, envia uma resposta segura padrão</b></div>
+        </div>
+        <div class="step-arrow">↓ passou: a resposta segue para envio</div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- 07 -->
+    <section class="stage">
+      <div class="stage-label"><span class="n">ETAPA 07</span><h2>Resposta</h2><p>O formato segue o que o cliente mandou. O envio volta pelo mesmo canal.</p></div>
+      <div>
+        <div class="group">
+          <p class="sub">1. Formato · definido pelo <code>tipo_origem</code></p>
+          <div class="grid">
+            <div class="node"><h3>Chegou áudio → responde áudio</h3><p><code>gpt-4o-mini-tts</code> gera o áudio em opus a partir de uma versão curta da resposta.</p></div>
+            <div class="node"><h3>Chegou texto → responde texto</h3><p>Envia o texto como está.</p></div>
+            <div class="node"><h3>Chegou imagem → responde texto</h3><p>Envia o texto como está.</p></div>
+          </div>
+        </div>
+        <div class="merge"><span>↓</span><small>resposta pronta no formato certo</small></div>
+        <div class="group">
+          <p class="sub">2. Envio · volta pelo mesmo <code>canal</code> de entrada</p>
+          <div class="grid">
+            <div class="node"><h3>WhatsApp</h3><p>Evolution: <code>sendText</code> / <code>sendWhatsAppAudio</code></p></div>
+            <div class="node"><h3>Tela de chat</h3><p>Retorna na resposta do <code>POST /chat</code> (texto ou áudio para tocar).</p></div>
+            <div class="node"><h3>Terminal / simulador</h3><p>Imprime a resposta e registra para o relatório de testes.</p></div>
+          </div>
+        </div>
+        <div class="merge"><span>↓</span><small>enviada</small></div>
+        <div class="node"><h3>3. Grava resposta <span class="tag db">SQLite</span></h3><p>Texto da resposta com <code>status = enviada</code>. Se foi em áudio, salva também o arquivo gerado pelo TTS e guarda o caminho em <code>audio_path</code>. Entra no histórico para o próximo turno.</p></div>
+      </div>
+    </section>
+    <div class="connector"></div>
+
+    <!-- GRAFO DO AGENTE (LangGraph) -->
+    <section class="stage grafo-sec">
+      <div class="stage-label"><span class="n">GRAFO</span><h2>O agente por dentro</h2>
+        <p>Os nós e ligações que o LangGraph monta de verdade (extraídos do código), com um exemplo passando por eles.</p></div>
+      <div class="grafo-corpo">
+        <div class="g-legenda" aria-hidden="true">
+          <span><i class="lg lg-llm"></i>LLM (decide e escreve)</span>
+          <span><i class="lg lg-cod"></i>Código (regra fixa)</span>
+          <span><i class="lg lg-tool"></i>Tool</span>
+          <span><i class="lg lg-db"></i>Banco</span>
+          <span><i class="lg-linha"></i>sempre</span>
+          <span><i class="lg-linha lg-tracejada"></i>condicional</span>
+        </div>
+        <div class="grafo-wrap">
+          <svg class="grafo" viewBox="0 0 1000 640" role="img" aria-labelledby="grafo-titulo grafo-desc">
+            <title id="grafo-titulo">Grafo do agente</title>
+            <desc id="grafo-desc">início, extrair_dados, carregar_contexto, agente (LLM) com tools, checar_transferencia que pode cobrar o agente uma vez, resposta, fim.</desc>
+            <defs>
+              <marker id="g-seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="g-seta"/></marker>
+              <marker id="g-seta-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="g-seta-n"/></marker>
+            </defs>
+
+            <!-- ===== ligações do fluxo principal ===== -->
+            <line x1="470" y1="44" x2="470" y2="72" class="g-l" marker-end="url(#g-seta)"/>
+            <line x1="470" y1="128" x2="470" y2="160" class="g-l" marker-end="url(#g-seta)"/>
+            <line x1="470" y1="216" x2="470" y2="250" class="g-l" marker-end="url(#g-seta)"/>
+            <line x1="470" y1="330" x2="470" y2="378" class="g-l g-c" marker-end="url(#g-seta)"/>
+            <rect x="480" y="344" width="132" height="18" rx="9" class="g-pill"/>
+            <text x="546" y="357" text-anchor="middle" class="g-pill-t">escreveu a resposta</text>
+            <line x1="470" y1="434" x2="470" y2="478" class="g-l g-c" marker-end="url(#g-seta)"/>
+            <rect x="480" y="447" width="78" height="18" rx="9" class="g-pill"/>
+            <text x="519" y="460" text-anchor="middle" class="g-pill-t">tudo certo</text>
+            <line x1="470" y1="534" x2="470" y2="562" class="g-l" marker-end="url(#g-seta)"/>
+
+            <!-- agente ⇄ tools -->
+            <line x1="590" y1="276" x2="708" y2="276" class="g-l g-c" marker-end="url(#g-seta)"/>
+            <rect x="604" y="252" width="90" height="18" rx="9" class="g-pill"/>
+            <text x="649" y="265" text-anchor="middle" class="g-pill-t">chama tool</text>
+            <line x1="708" y1="306" x2="590" y2="306" class="g-l" marker-end="url(#g-seta)"/>
+            <rect x="610" y="312" width="78" height="18" rx="9" class="g-pill"/>
+            <text x="649" y="325" text-anchor="middle" class="g-pill-t">resultado</text>
+
+            <!-- checar -> agente: cobra 1 vez -->
+            <path d="M350,406 C268,406 268,292 346,292" class="g-l g-c" marker-end="url(#g-seta)"/>
+            <rect x="226" y="340" width="88" height="18" rx="9" class="g-pill g-pill-forte"/>
+            <text x="270" y="353" text-anchor="middle" class="g-pill-t">cobra 1 vez</text>
+
+            <!-- ===== nós ===== -->
+            <circle cx="470" cy="30" r="14" class="g-ponta"/>
+            <text x="470" y="34" text-anchor="middle" class="g-ponta-t">início</text>
+
+            <g class="g-no g-cod">
+              <rect x="350" y="74" width="240" height="54" rx="10"/>
+              <circle cx="372" cy="101" r="11" class="g-num"/><text x="372" y="105" text-anchor="middle" class="g-num-t">1</text>
+              <text x="392" y="96" class="g-nome">extrair_dados</text>
+              <text x="392" y="114" class="g-desc">lê a mensagem e grava a ficha</text>
+            </g>
+            <g class="g-no g-cod">
+              <rect x="350" y="162" width="240" height="54" rx="10"/>
+              <circle cx="372" cy="189" r="11" class="g-num"/><text x="372" y="193" text-anchor="middle" class="g-num-t">2</text>
+              <text x="392" y="184" class="g-nome">carregar_contexto</text>
+              <text x="392" y="202" class="g-desc">histórico + checklist + ordens</text>
+            </g>
+            <g class="g-no g-llm">
+              <rect x="350" y="252" width="240" height="78" rx="12"/>
+              <circle cx="372" cy="279" r="11" class="g-num g-num-llm"/><text x="372" y="283" text-anchor="middle" class="g-num-t g-num-t-llm">3</text>
+              <text x="392" y="275" class="g-nome g-nome-llm">agente</text>
+              <text x="392" y="294" class="g-desc g-desc-llm">gpt-4o-mini · responde ou</text>
+              <text x="392" y="310" class="g-desc g-desc-llm">chama uma tool, quantas vezes precisar</text>
+            </g>
+            <g class="g-no g-tool">
+              <rect x="710" y="244" width="200" height="92" rx="10"/>
+              <text x="726" y="266" class="g-nome">tools</text>
+              <text x="726" y="286" class="g-desc">🔎 buscar_estoque</text>
+              <text x="726" y="304" class="g-desc">📄 detalhes_carro</text>
+              <text x="726" y="322" class="g-desc">🙋 transferir_humano</text>
+            </g>
+            <g class="g-no g-cod g-cod-forte">
+              <rect x="350" y="380" width="240" height="54" rx="10"/>
+              <circle cx="372" cy="407" r="11" class="g-num"/><text x="372" y="411" text-anchor="middle" class="g-num-t">4</text>
+              <text x="392" y="402" class="g-nome">checar_transferencia</text>
+              <text x="392" y="420" class="g-desc">regras que o LLM não pode furar</text>
+            </g>
+            <g class="g-no g-cod">
+              <rect x="350" y="480" width="240" height="54" rx="10"/>
+              <circle cx="372" cy="507" r="11" class="g-num"/><text x="372" y="511" text-anchor="middle" class="g-num-t">5</text>
+              <text x="392" y="502" class="g-nome">resposta</text>
+              <text x="392" y="520" class="g-desc">texto final, limpo para o WhatsApp</text>
+            </g>
+            <circle cx="470" cy="576" r="14" class="g-ponta"/>
+            <text x="470" y="580" text-anchor="middle" class="g-ponta-t">fim</text>
+            <text x="470" y="612" text-anchor="middle" class="g-desc">depois: guardrail de saída → áudio ou texto → canal</text>
+
+            <!-- banco (cilindro) -->
+            <g class="g-db">
+              <path d="M750,384 v40 a60,12 0 0 0 120,0 v-40"/>
+              <ellipse cx="810" cy="384" rx="60" ry="12"/>
+              <text x="810" y="414" text-anchor="middle" class="g-nome">SQLite</text>
+              <text x="810" y="452" text-anchor="middle" class="g-desc">estoque · leads · transferências</text>
+            </g>
+            <line x1="810" y1="338" x2="810" y2="368" class="g-n" marker-end="url(#g-seta-n)"/>
+
+            <!-- nota: ordens do turno -->
+            <g class="g-nota">
+              <rect x="640" y="60" width="340" height="130" rx="10"/>
+              <text x="656" y="82" class="g-nota-t">Ordens do turno (o código monta)</text>
+              <text x="656" y="104" class="g-desc">• checklist: ✅ feito · 🟡 em parte · ⬜ falta</text>
+              <text x="656" y="122" class="g-desc">• carros escolhidos, do mais barato ao mais caro</text>
+              <text x="656" y="140" class="g-desc">• ação obrigatória (reclamação, desconto, qualificado…)</text>
+              <text x="656" y="158" class="g-desc">• aberturas e comentários já usados (não repetir)</text>
+              <text x="656" y="176" class="g-desc">• apresentar-se na 1ª mensagem · honestidade</text>
+            </g>
+            <line x1="640" y1="176" x2="594" y2="190" class="g-n" marker-end="url(#g-seta-n)"/>
+
+            <!-- nota: o que o código cobra -->
+            <g class="g-nota">
+              <rect x="16" y="366" width="200" height="190" rx="10"/>
+              <text x="30" y="388" class="g-nota-t">Volta ao agente se:</text>
+              <text x="30" y="410" class="g-desc">• prometeu vendedor sem a tool</text>
+              <text x="30" y="428" class="g-desc">• soou como robô</text>
+              <text x="30" y="446" class="g-desc">• não disse que é assistente</text>
+              <text x="30" y="462" class="g-desc">  virtual quando perguntado</text>
+              <text x="30" y="480" class="g-desc">• ofereceu visita antes da hora</text>
+              <line x1="30" y1="494" x2="202" y2="494" class="g-sep"/>
+              <text x="30" y="514" class="g-desc">Motivo de transferência e</text>
+              <text x="30" y="530" class="g-desc">mesmo assim não transferiu?</text>
+              <text x="30" y="546" class="g-desc g-forte">O código transfere sozinho.</text>
+            </g>
+
+            <!-- nota: extração -->
+            <g class="g-nota">
+              <rect x="16" y="70" width="200" height="118" rx="10"/>
+              <text x="30" y="92" class="g-nota-t">O que a extração pega</text>
+              <text x="30" y="114" class="g-desc">• modelo / tipo de carro</text>
+              <text x="30" y="132" class="g-desc">• valor · como quer comprar</text>
+              <text x="30" y="150" class="g-desc">• troca, entrada, prazo…</text>
+              <text x="30" y="168" class="g-desc">• motivo para chamar vendedor</text>
+            </g>
+            <line x1="218" y1="101" x2="346" y2="101" class="g-n" marker-end="url(#g-seta-n)"/>
+          </svg>
+        </div>
+
+        <div class="g-exemplo">
+          <p class="sub" style="margin:0 0 8px">Exemplo · cliente manda: <b>"Quero um SUV até 120 mil, vou financiar"</b></p>
+          <ol>
+            <li><code>extrair_dados</code> grava <b>SUV · até R$ 120.000 · financiar</b>. As 3 respostas vieram juntas: lead qualificado.</li>
+            <li><code>carregar_contexto</code> junta a conversa, o checklist completo, os 4 SUVs até 120 mil (Duster → T-Cross) e a ordem de passar para o vendedor.</li>
+            <li><code>agente</code> mostra os SUVs com um comentário de vendedor e chama a tool <code>transferir_humano</code> (qualificado), que grava a transferência e o resumo.</li>
+            <li><code>checar_transferencia</code> confere: transferiu, não prometeu crédito, não soou como robô. Tudo certo.</li>
+            <li><code>resposta</code> limpa a formatação e entrega para o guardrail de saída, que confere os preços no banco antes de enviar.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+    <div class="connector"></div>
+    <div class="end">Fim do agente. Tudo o que ele aprendeu está no banco, e as telas leem de lá.</div>
+  </div>
+
+  <!-- PARTE B: TELAS -->
+  <div class="part-head" id="telas"><span class="n">PARTE B</span><h2>Telas</h2><p>Páginas HTML simples, servidas pela mesma API. Leem e gravam no SQLite.</p></div>
+
+  <section class="navmap">
+    <p class="sub">Navegação</p>
+    <div class="navrow">
+      <div class="navside">
+        <span class="who">Lado do cliente</span>
+        <div class="seq"><div class="node"><h3>T1 · Chat do cliente</h3><p><code>/chat</code></p></div></div>
+      </div>
+      <div class="navside">
+        <span class="who">Lado da revenda</span>
+        <div class="seq">
+          <div class="node"><h3>T2 · Painel de leads</h3><p><code>/painel</code></p></div>
+          <span class="arrow">⇄</span>
+          <div class="node"><h3>T3 · Ficha do lead</h3><p><code>/painel/lead/{id}</code></p></div>
+          <span class="arrow">→</span>
+          <div class="node"><h3>T4 · Exportar para CRM</h3><p><code>/painel/exportar</code></p></div>
+        </div>
+        <div class="seq" style="margin-top:8px"><div class="node"><h3>T5 · Estoque</h3><p><code>/painel/estoque</code>, acessível pelo menu do painel</p></div><div class="node"><h3>T6 · Testes</h3><p><code>/painel/testes</code>, resultado do simulador</p></div><div class="node"><h3>T7 · Config</h3><p><code>/painel/config</code>: áudio ou texto, nomes, palavras-chave; modelos e libs só consulta</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- T1 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">Autoconf · Atendimento</div>
+      <div class="bub l">#thread Quero um SUV até 120 mil</div>
+      <div class="bub r">Temos 2 opções: Creta Limited 2022 por R$ 112.900 e T-Cross 2023 por R$ 118.500…</div>
+      <div class="bub l">▶ áudio 0:08</div>
+      <div class="bub r">▶ áudio 0:12</div>
+      <div class="wf-input"><span>Digite uma mensagem</span><span>Anexar · Áudio · Enviar</span></div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T1</span><h3>Chat do cliente</h3><code>/chat</code></div>
+      <p class="lead">Simula o WhatsApp no navegador. É a entrada "Tela de chat" da etapa 01, para testar e demonstrar sem a Evolution.</p>
+      <dl>
+        <dt>Mostra</dt><dd>Conversa em balões. Respostas em áudio aparecem com player. Aviso "Você foi transferido para um vendedor" quando o status vira humano.</dd>
+        <dt>Ações</dt><dd>Enviar texto · gravar ou anexar áudio · anexar imagem · iniciar nova conversa (novo <code>cliente_id</code>)</dd>
+        <dt>API</dt><dd><code>POST /chat</code> (envia e recebe a resposta) · <code>GET /chat/{cliente_id}/historico</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- T2 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">Leads · <span class="pill">Todos</span><span class="pill on">Com humano</span><span class="pill">Com bot</span></div>
+      <div class="wf-table">
+        <div class="tr th"><span>Cliente</span><span>Canal</span><span>Urgência</span><span>Motivo</span></div>
+        <div class="tr"><span>(11) 9…41</span><span>WhatsApp</span><span><b>alta</b></span><span>carro quebrou</span></div>
+        <div class="tr"><span>(21) 9…07</span><span>Tela</span><span>média</span><span>negociação</span></div>
+        <div class="tr"><span>(31) 9…88</span><span>WhatsApp</span><span>alta</span><span>reclamação</span></div>
+      </div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T2</span><h3>Painel de leads</h3><code>/painel</code></div>
+      <p class="lead">Tela inicial do vendedor. Mostra quem precisa de atendimento agora. 10 por página; os leads do simulador ficam escondidos por padrão (filtro de canal).</p>
+      <dl>
+        <dt>Mostra</dt><dd>Tabela com cliente, canal, status (bot / humano), urgência, motivo da transferência e horário. Transferidos e mais urgentes no topo.</dd>
+        <dt>Ações</dt><dd>Filtrar por status e urgência · abrir a ficha (T3) · ir para exportação (T4)</dd>
+        <dt>API</dt><dd><code>GET /leads?status=&amp;urgencia=</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- T3 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">← Leads · (11) 9…41 · WhatsApp · <b>com humano</b></div>
+      <div class="wf-box"><b>Resumo</b><br>Quer SUV até 120 mil, Gol 2018 na troca, quer financiar. Urgente: carro quebrou.</div>
+      <div class="wf-grid">
+        <span>Interesse: SUV</span><span>Faixa: até 120k</span>
+        <span>Troca: Gol 2018</span><span>Financiar: sim</span>
+        <span>Urgência: alta</span><span>1º carro: não</span>
+        <span>Idade: 34</span><span>Renda: 5–8k</span>
+      </div>
+      <div class="wf-box">Histórico da conversa…</div>
+      <div class="wf-input"><span>Próximo passo: ligar hoje</span><span>Devolver ao bot · Exportar</span></div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T3</span><h3>Ficha do lead</h3><code>/painel/lead/{id}</code></div>
+      <p class="lead">Tudo o que o vendedor precisa para continuar a conversa sem perguntar de novo.</p>
+      <dl>
+        <dt>Mostra</dt><dd>Cliente, canal e status · resumo e motivo da transferência · ficha (interesse, faixa de preço, troca, financiamento, urgência, primeiro carro, idade, faixa de renda) · próximo passo · histórico completo</dd>
+        <dt>Ações</dt><dd>Devolver ao bot (status volta para bot) · exportar este lead</dd>
+        <dt>API</dt><dd><code>GET /leads/{id}</code> · <code>POST /leads/{id}/devolver</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- T4 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">Exportar leads</div>
+      <div class="wf-grid">
+        <span class="pill on">CSV</span><span class="pill">JSON</span>
+        <span class="pill">HubSpot</span><span class="pill">Pipedrive</span>
+        <span class="pill">Salesforce</span><span></span>
+      </div>
+      <div class="wf-table">
+        <div class="tr th"><span>Campo nosso</span><span>Campo no CRM</span></div>
+        <div class="tr"><span>telefone</span><span>phone</span></div>
+        <div class="tr"><span>interesse</span><span>deal_name</span></div>
+        <div class="tr"><span>faixa_preco</span><span>amount</span></div>
+      </div>
+      <div class="wf-input"><span>12 leads selecionados</span><span>Baixar</span></div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T4</span><h3>Exportar para CRM</h3><code>/painel/exportar</code></div>
+      <p class="lead">Leva os leads para outro sistema. Mostra só as colunas do CRM escolhido. Exporta só leads válidos (WhatsApp ou site, não arquivados, com informação de compra), com nome e telefone no formato que o CRM aceita.</p>
+      <dl>
+        <dt>Mostra</dt><dd>Formato escolhido · tabela de mapeamento (campo nosso → campo do CRM) · quantos leads vão no arquivo</dd>
+        <dt>Ações</dt><dd>Escolher formato · filtrar quais leads (todos, transferidos, período) · baixar o arquivo</dd>
+        <dt>API</dt><dd><code>GET /export?formato=csv|json|hubspot|pipedrive|salesforce</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- T5 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">Estoque · <span class="pill on">+ Adicionar carro</span><span class="pill">Importar CSV</span></div>
+      <div class="wf-table">
+        <div class="tr th"><span>Modelo</span><span>Ano</span><span>Preço</span><span>Ações</span></div>
+        <div class="tr"><span>Compass Longitude</span><span>2023</span><span>139.900</span><span>Editar · Excluir</span></div>
+        <div class="tr"><span>Creta Limited</span><span>2022</span><span>112.900</span><span>Editar · Excluir</span></div>
+        <div class="tr"><span>Onix LT</span><span>2022</span><span>72.900</span><span>Editar · Excluir</span></div>
+      </div>
+      <div class="wf-box"><b>Adicionar / editar carro</b>
+        <div class="wf-grid" style="margin-top:4px">
+          <span>Modelo: ______</span><span>Ano: ____</span>
+          <span>Km: ______</span><span>Preço: ______</span>
+          <span>Tipo: SUV ▾</span><span>Disponível: ☑</span>
+        </div>
+      </div>
+      <div class="wf-input"><span>Cancelar</span><span>Salvar</span></div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T5</span><h3>Estoque</h3><code>/painel/estoque</code></div>
+      <p class="lead">CRUD da tabela <code>carros</code>, que as tools <code>buscar_estoque</code> e <code>detalhes_carro</code> consultam. O que muda aqui vale na hora para o agente.</p>
+      <dl>
+        <dt>Mostra</dt><dd>Lista de carros com modelo, ano, km, preço, tipo e disponível (sim/não) · formulário de adicionar e editar</dd>
+        <dt>Ações</dt><dd>Adicionar · editar · excluir · marcar como vendido (disponível = não, o agente deixa de oferecer) · importar CSV</dd>
+        <dt>API</dt><dd><code>GET /carros</code> · <code>POST /carros</code> · <code>PUT /carros/{id}</code> · <code>DELETE /carros/{id}</code> · <code>POST /carros/importar</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- T6 -->
+  <section class="screen">
+    <div class="wf" aria-hidden="true">
+      <div class="wf-top">Testes do agente · <b>41 de 41</b> casos passaram</div>
+      <div class="wf-box"><b>✓ ok</b> · 1-suv-troca-financiamento</div>
+      <div class="wf-box"><b>✓ ok</b> · 2-hilux</div>
+      <div class="wf-box" style="border-color:var(--stop)"><b>✗ falhou</b> · x27 · ficha.urgencia = baixa (real: media)</div>
+      <div class="wf-input"><span>Todos · Só falhas</span><span>abre a conversa</span></div>
+    </div>
+    <div class="info">
+      <div class="info-head"><span class="n">T6</span><h3>Testes</h3><code>/painel/testes</code></div>
+      <p class="lead">Mostra a última rodada completa do simulador. É a entrega "onde ainda erra" do desafio, pronta para a apresentação.</p>
+      <dl>
+        <dt>Mostra</dt><dd>Placar · cada caso com a conversa, as tools chamadas, os bloqueios dos guardrails, as verificações (✓/✗ com o valor real), a ficha final e o resumo para o vendedor</dd>
+        <dt>Ações</dt><dd>Filtrar só as falhas · abrir e fechar cada caso</dd>
+        <dt>Dados</dt><dd><code>relatorios/resultado.json</code>, gerado por <code>python -m simulador</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- PARTE C -->
+  <div class="part-head" id="compartilhado"><span class="n">PARTE C</span><h2>Compartilhado</h2><p>Usado pelo agente e pelas telas.</p></div>
+
+  <!-- Transversais -->
+  <div>
+    <div class="cross">
+      <section class="stage">
+        <div class="stage-label"><span class="n">BANCO</span><h2>SQLite</h2><p>Basta para o desafio. Com SQLAlchemy, trocar por Postgres depois é só mudar a URL.</p></div>
+        <div class="node"><ul>
+          <li><code>leads</code>: telefone, canal, ficha, status (bot / humano)</li>
+          <li><code>mensagens</code>: lead_id, papel (cliente / agente), texto, tipo_origem, status (enviada / bloqueada), motivo_bloqueio, audio_path, data</li>
+          <li><code>carros</code>: modelo, ano, km, preço, tipo, disponível</li>
+          <li><code>transferencias</code>: lead_id, motivo, urgência, resumo</li>
+        </ul></div>
+      </section>
+      <section class="stage">
+        <div class="stage-label"><span class="n">MONITORAMENTO</span><h2>Langfuse v3 (self-hosted)</h2><p>Sobe no compose. Interface em <code>localhost:3000</code></p></div>
+        <div class="node"><ul>
+          <li>Um trace por mensagem, com guardrail de entrada, agente, tools, juiz e reescrita dentro dele</li>
+          <li>Saída do trace: tools chamadas, transferência e bloqueios</li>
+          <li>Latência e custo por turno</li>
+          <li>Agrupado por sessão (<code>lead-{id}</code>) e cliente</li>
+          <li>Projeto e chaves criados na primeira subida</li>
+        </ul></div>
+      </section>
+      <section class="stage">
+        <div class="stage-label"><span class="n">TESTES</span><h2>Simulador de conversas</h2><p>Módulo à parte</p></div>
+        <div class="node"><ul>
+          <li>Chama o pipeline direto, sem WhatsApp</li>
+          <li>Roda os 6 casos do PDF + extras</li>
+          <li>Checa: transferiu? citou carro fora do estoque? registrou a troca?</li>
+          <li>Gera um relatório de acertos e erros</li>
+        </ul></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- INFRA -->
+  <section class="stack-wrap">
+    <h2 class="sec">Infraestrutura · docker compose</h2>
+    <p class="note" style="margin:0 0 12px;color:var(--muted)">Um comando (<code>docker compose up -d --build</code>) sobe 11 containers em 3 blocos. Eles se falam pela rede interna do compose. Só as portas abaixo ficam abertas na máquina.</p>
+    <div class="infra">
+      <div class="group">
+        <p class="sub">Agente</p>
+        <div class="node"><h3>app <span class="tag db">:8000</span></h3><p>FastAPI: webhook, <code>/chat</code>, API e telas. Agente LangGraph. SQLite em <code>./data</code>, relatórios em <code>./relatorios</code>.</p></div>
+      </div>
+      <div class="group">
+        <p class="sub">WhatsApp</p>
+        <div class="node"><h3>evolution <span class="tag db">:8080</span></h3><p>Evolution API v2.3.7. Conecta o número pelo QR code.</p></div>
+        <div class="infra-sub">
+          <div class="node"><h3>evolution-db</h3><p>Postgres 16: instâncias e sessões</p></div>
+          <div class="node"><h3>evolution-redis</h3><p>Redis 7: cache</p></div>
+        </div>
+      </div>
+      <div class="group">
+        <p class="sub">Monitoramento</p>
+        <div class="infra-sub">
+          <div class="node"><h3>langfuse-web <span class="tag db">:3000</span></h3><p>Interface e API de ingestão dos traces</p></div>
+          <div class="node"><h3>langfuse-worker</h3><p>Processa os eventos em segundo plano</p></div>
+        </div>
+        <div class="infra-sub">
+          <div class="node"><h3>langfuse-db</h3><p>Postgres 16: usuários, projetos, chaves</p></div>
+          <div class="node"><h3>langfuse-clickhouse</h3><p>ClickHouse 25.3: traces e observações</p></div>
+          <div class="node"><h3>langfuse-minio <span class="tag db">:9000</span> <span class="tag db">:9001</span></h3><p>MinIO (S3): eventos brutos e mídia</p></div>
+          <div class="node"><h3>langfuse-redis</h3><p>Redis 7: fila do worker</p></div>
+        </div>
+      </div>
+    </div>
+    <p class="sub" style="margin:10px 0 6px">Ligações</p>
+    <div class="links">
+      <div class="node"><p><b>evolution → app</b> · webhook <code>http://app:8000/webhook/evolution</code> a cada mensagem recebida (sem ngrok). Com uma Evolution <b>externa</b>, o app é exposto pelo <code>ngrok</code> opcional (<code>--profile ngrok</code>, painel em <code>:4040</code>)</p></div>
+      <div class="node"><p><b>app → evolution</b> · envio de texto e áudio <code>http://evolution:8080/message/…</code></p></div>
+      <div class="node"><p><b>app → langfuse-web</b> · traces de cada mensagem <code>http://langfuse-web:3000</code></p></div>
+      <div class="node"><p><b>app → OpenAI</b> · única saída para a internet: LLM, transcrição, visão e voz</p></div>
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section class="stack-wrap">
+    <h2 class="sec">Stack</h2>
+    <div class="stack-scroll">
+      <table class="stack">
+        <thead><tr><th>Camada</th><th>Escolha</th><th>Onde entra</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="3">Base</td></tr>
+          <tr><td>Linguagem</td><td><b>Python 3.12</b></td><td>Todo o projeto</td></tr>
+          <tr><td>Dependências</td><td><b>uv</b> + <code>pyproject.toml</code></td><td>Instalar e rodar com um comando</td></tr>
+          <tr><td>Configuração</td><td><b>pydantic-settings</b></td><td>Lê o <code>.env</code></td></tr>
+          <tr><td>Validação</td><td><b>Pydantic v2</b></td><td>Mensagem padrão, ficha do lead, saída estruturada dos guardrails</td></tr>
+
+          <tr class="grp"><td colspan="3">API e canais</td></tr>
+          <tr><td>Servidor</td><td><b>FastAPI</b> + <b>Uvicorn</b></td><td>Webhook, <code>/chat</code>, API das telas</td></tr>
+          <tr><td>Processamento em segundo plano</td><td><b>asyncio</b> (sem fila externa)</td><td>Webhook responde 200 na hora · agrupar mensagens (espera de 5s por cliente)</td></tr>
+          <tr><td>WhatsApp</td><td><b>Evolution API v2</b> via <b>httpx</b></td><td>Recebe pelo webhook, envia com <code>sendText</code> / <code>sendWhatsAppAudio</code></td></tr>
+          <tr><td>Infraestrutura</td><td><b>Docker Compose</b></td><td>Sobe os 11 containers (app, Evolution + Postgres + Redis, Langfuse + Postgres + ClickHouse + MinIO + Redis) com um comando. A Evolution chama o webhook pela rede interna (<code>http://app:8000</code>), sem ngrok</td></tr>
+
+          <tr class="grp"><td colspan="3">Agente e modelos</td></tr>
+          <tr><td>Fluxo do agente</td><td><b>LangGraph</b></td><td>Grafo da etapa 05: contexto → agente ⇄ tools → resposta</td></tr>
+          <tr><td>Chamadas ao modelo e tools</td><td><b>LangChain</b> (<code>langchain-openai</code>, <code>@tool</code>)</td><td>Tools do agente, guardrails com saída estruturada</td></tr>
+          <tr><td>LLM do agente</td><td><b>OpenAI gpt-4o-mini</b></td><td>Agente, guardrails, resumo para o vendedor. Barato e rápido para o desafio</td></tr>
+          <tr><td>Transcrição</td><td><b>OpenAI gpt-4o-mini-transcribe</b> (ou <code>whisper-1</code>)</td><td>Etapa 03, áudio. Aceita o <code>.ogg</code> do WhatsApp direto. Recebe as marcas e modelos como dica de vocabulário</td></tr>
+          <tr><td>Imagem</td><td><b>gpt-4o-mini</b> com visão</td><td>Etapa 03, descrição da imagem</td></tr>
+          <tr><td>Voz (geração de áudio)</td><td><b>OpenAI gpt-4o-mini-tts</b><br>voz <code>coral</code> ou <code>nova</code> · <code>response_format="opus"</code></td><td>Etapa 07. Mesma chave da OpenAI. O opus é o formato de voz do WhatsApp, então vai direto no <code>sendWhatsAppAudio</code> sem ffmpeg. Arquivo salvo em <code>data/audios/{message_id}.ogg</code></td></tr>
+          <tr><td>Tom da voz</td><td><code>instructions</code> do TTS</td><td>"Fale em português do Brasil, tom simpático de atendente de concessionária, ritmo natural"</td></tr>
+          <tr><td>Texto para o áudio</td><td><b>Versão curta</b> da resposta</td><td>O áudio leva a resposta resumida, sem listas e detalhes de preço. O texto completo vai junto quando o canal permitir</td></tr>
+          <tr><td>Reserva de voz</td><td><b>OpenAI tts-1</b></td><td>Se o gpt-4o-mini-tts não estiver disponível na conta. Não aceita instruções de tom</td></tr>
+
+          <tr class="grp"><td colspan="3">Guardrails</td></tr>
+          <tr><td>Entrada</td><td><b>Regras</b> (regex de injeção) + <b>classificador LLM</b></td><td>Etapa 04: bloqueia fora do assunto, injeção e ofensa</td></tr>
+          <tr><td>Saída</td><td><b>Checagem em código</b> contra o banco + <b>LLM juiz</b></td><td>Etapa 06: modelo e preço citados existem? Vazou prompt? Prometeu crédito ou desconto?</td></tr>
+
+          <tr class="grp"><td colspan="3">Dados</td></tr>
+          <tr><td>Banco</td><td><b>SQLite</b></td><td>Um arquivo <code>autoconf.db</code>, nada para instalar</td></tr>
+          <tr><td>ORM</td><td><b>SQLAlchemy 2.0</b></td><td>Tabelas leads, mensagens, carros, transferencias. Trocar por Postgres = mudar a URL</td></tr>
+          <tr><td>Áudios gerados</td><td><b>Pasta local</b> <code>data/audios/</code></td><td>Caminho salvo em <code>mensagens.audio_path</code></td></tr>
+          <tr><td>Seed do estoque</td><td><b>CSV</b> + script</td><td>Carrega os 5 carros do PDF na primeira execução</td></tr>
+          <tr><td>Exportação</td><td><b>csv</b> e <b>json</b> da biblioteca padrão</td><td>T4: CSV, JSON e mapeamentos de CRM</td></tr>
+
+          <tr class="grp"><td colspan="3">Telas</td></tr>
+          <tr><td>Páginas</td><td><b>Jinja2</b> (templates do FastAPI) + HTML/CSS</td><td>T1 a T5, servidas pela mesma API</td></tr>
+          <tr><td>Interação</td><td><b>JavaScript puro</b> (<code>fetch</code>, <code>MediaRecorder</code> para gravar áudio)</td><td>T1 envia texto, áudio e imagem; T5 salva o formulário</td></tr>
+
+          <tr class="grp"><td colspan="3">Qualidade</td></tr>
+          <tr><td>Monitoramento</td><td><b>Langfuse v3 self-hosted</b> no compose (web, worker, Postgres, ClickHouse, Redis, MinIO)</td><td>Um trace por mensagem com guardrails, LLM, tools e custo dentro dele, agrupado por sessão do lead. Interface em <code>localhost:3000</code></td></tr>
+          <tr><td>Testes unitários</td><td><b>pytest</b></td><td>Filtros, guardrail de saída, busca no estoque</td></tr>
+          <tr><td>Simulador de conversas</td><td><b>Script Python</b> (<code>python -m simulador</code>)</td><td>Roda os 6 casos do PDF e gera um relatório de acertos e erros em Markdown</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ENV -->
+  <section class="env">
+    <div>
+      <h2 class="sec">.env</h2>
+      <p class="note" style="margin:0;color:var(--muted)">Variáveis de configuração. Nenhuma chave vai para o repositório.</p>
+    </div>
+    <pre><span class="c"># OpenAI (LLM, Whisper, visão, TTS)</span>
+OPENAI_API_KEY=
+
+<span class="c"># Evolution API</span>
+EVOLUTION_API_URL=
+EVOLUTION_API_KEY=
+EVOLUTION_INSTANCE=
+
+<span class="c"># Gatilho do agente</span>
+TRIGGER_KEYWORD=#thread
+
+<span class="c"># Langfuse (monitoramento)</span>
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=https://cloud.langfuse.com</pre>
+  </section>
+
+  <!-- Perguntas -->
+  <section>
+    <h2 class="sec">Decisões</h2>
+    <ol class="q">
+      <li><code>#thread</code> é filtro de cada mensagem no WhatsApp. <span>Sem a palavra-chave, a mensagem é ignorada. Áudio e imagem sem legenda não têm como trazer o texto, então passam se o cliente mandou <code>#thread</code> nos últimos 30 minutos. Na tela de chat e no terminal não precisa.</span></li>
+      <li>Fora do assunto é bloqueado no guardrail de entrada. <span>A resposta fixa traz a conversa de volta para carros, como o PDF pede.</span></li>
+      <li>Idade e renda são dados pessoais (LGPD). <span>Só são perguntadas quando o cliente quer financiar, e a renda é guardada como faixa.</span></li>
+      <li>O vendedor vê a transferência no painel. <span>Avisar o número dele pela Evolution fica para depois.</span></li>
+      <li>Escopo de ~4h. <span>Prioridade nas etapas 01–07 e no simulador. Painel e exportação para CRM na versão mais simples.</span></li>
+    </ol>
+  </section>
+</div>
+</body>
+</html>
