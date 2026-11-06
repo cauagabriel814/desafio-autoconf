@@ -1,0 +1,27 @@
+# Segredos e dados locais
+.env
+data/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Rodadas parciais do simulador (o relatório que vai para o repositório é o da rodada completa)
+relatorios/resultado_parcial.md
+
+# Documento do desafio (da Autoconf, não é do projeto)
+Desafio-tecnico-vaga-ENG-IA.pdf
+relatorios/resultado_parcial.json
+relatorios/rodada.log
+relatorios/ao_vivo.json
+relatorios/ao_vivo.tmp
+
+# Instruções locais do Claude Code
+CLAUDE.md
+
+# Documentos de apoio (só locais)
+MELHORIAS.md
+NOTA.md
+PLANEJAMENTO.md
