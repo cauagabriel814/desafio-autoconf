@@ -7,6 +7,7 @@
             height: clamp(320px, calc(100vh - 330px), 640px); }
   .rolagem { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
   .janela .aviso { margin: 0 16px 12px; }
+  .bolha img { display: block; max-width: min(280px, 100%); max-height: 260px; border-radius: 8px; margin-bottom: 4px; }
   .compositor { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
   .campo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line);
            border-radius: 999px; padding: 4px 6px 4px 14px; background: var(--bg); }
@@ -185,9 +186,18 @@ $("imagem").addEventListener("change", () => {
   if (!f) return;
   const fd = new FormData();
   fd.append("arquivo", f);
-  fd.append("texto", $("texto").value.trim());
+  const legenda = $("texto").value.trim();
+  fd.append("texto", legenda);
   $("texto").value = "";
-  enviar(fd, "[imagem] " + f.name);
+  // bolha do cliente com a própria imagem (como no WhatsApp), e a legenda embaixo, se houver
+  const minha = bolha("cliente", legenda);
+  const img = document.createElement("img");
+  img.src = URL.createObjectURL(f);
+  img.alt = "Imagem enviada: " + f.name;
+  img.addEventListener("load", rolarParaOFim);
+  img.addEventListener("error", () => { img.remove(); minha.prepend(document.createTextNode("[imagem] " + f.name)); });
+  minha.prepend(img);
+  enviar(fd, minha);
   $("imagem").value = "";
 });
 
