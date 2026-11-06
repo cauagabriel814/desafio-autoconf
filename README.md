@@ -105,6 +105,12 @@ Com `TEST=on` no `.env`, dois comandos ajudam a testar com o mesmo celular. Com 
 
 O simulador liga o modo de teste sozinho, porque tem casos para esses comandos.
 
+### Só tem um número? Atender o próprio número
+
+Por padrão o bot ignora tudo o que sai do número conectado. Para testar com **um número só**, ligue **Atender o próprio número** em `/painel/config` (ou `ACEITAR_PROPRIO_NUMERO=on` no `.env`). Depois, no WhatsApp, abra a conversa **"Mensagem para você"** (a conversa consigo mesmo) e mande `#thread oi, quero um SUV`: a Lia responde ali mesmo.
+
+Só essa conversa vale: os seus chats com outras pessoas continuam ignorados, e a Lia não responde às próprias respostas (ela guarda o que enviou). Desligado é o padrão.
+
 ### Terminal
 
 ```bash
