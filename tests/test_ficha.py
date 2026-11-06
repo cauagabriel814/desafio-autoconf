@@ -404,3 +404,22 @@ def test_sem_dados_quando_nao_da_para_buscar_no_estoque():
     assert not sem_dados({"nao_informado": ["faixa_preco"], "tipo_interesse": "SUV"})  # disse o tipo: dá para listar
     assert not sem_dados({"preco_max": 80000, "nao_informado": ["interesse"]})  # tem valor: lista o que cabe
     assert not sem_dados({"intencao": "vender", "nao_informado": ["faixa_preco", "interesse"]})
+
+
+def test_valor_abaixo_de_mil_quer_dizer_milhares():
+    # "uns 80 conto" às vezes chega da extração como 80: carro não custa menos de mil reais
+    l = repo.obter_ou_criar_lead("web", "valor-em-milhares")
+    aplicar(l.id, Extracao(preco_max=80), "Tô atrás de um sedã, tenho uns 80 conto")
+    assert repo.obter_lead(l.id).ficha["preco_max"] == 80000
+    aplicar(l.id, Extracao(preco_max=120000), "até 120 mil")  # valor normal não muda
+    assert repo.obter_lead(l.id).ficha["preco_max"] == 120000
+
+
+def test_valor_em_conto_e_lido_do_texto_quando_a_extracao_nao_devolve():
+    l = repo.obter_ou_criar_lead("web", "valor-em-conto")
+    aplicar(l.id, Extracao(tipo_interesse="Sedã"), "Tô atrás de um sedã, tenho uns 80 conto")
+    assert repo.obter_lead(l.id).ficha["preco_max"] == 80000
+    # entrada não é orçamento
+    l2 = repo.obter_ou_criar_lead("web", "entrada-em-conto")
+    aplicar(l2.id, Extracao(entrada=20000), "tenho uns 20 conto de entrada")
+    assert "preco_max" not in repo.obter_lead(l2.id).ficha

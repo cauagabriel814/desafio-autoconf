@@ -73,6 +73,15 @@ def aplicar(lead_id: int, ext: Extracao, texto: str | None = None) -> dict:
         campos.pop("preco_max", None)
         campos.pop("preco_min", None)
         ext.preco_max = ext.preco_min = None  # também não conta como "interesse novo" (não mostra lista)
+    # "uns 80 conto": se a extração não devolveu o valor, lê direto do texto ("conto" = mil reais)
+    conto = re.search(r"\b(\d{2,3})\s*contos?\b", t, re.IGNORECASE)
+    if conto and not campos.get("preco_max") and not campos.get("entrada") and not ficha.get("preco_max"):
+        campos["preco_max"] = ext.preco_max = int(conto.group(1))  # vira milhares logo abaixo
+    # "uns 80 conto", "100": ninguém compra carro por menos de mil reais, então 80 quer dizer 80 mil
+    for k in ("preco_min", "preco_max"):
+        if campos.get(k) and campos[k] < 1000:
+            campos[k] = ext_valor = campos[k] * 1000
+            setattr(ext, k, ext_valor)
     # Quem está vendendo e responde o carro ("É um Gol 2018") está dizendo o carro DELE, não o que quer comprar
     vendendo = ficha.get("intencao") == "vender" and campos.get("intencao") != "comprar"
     if (vendendo and campos.get("modelos_interesse") and not campos.get("tipo_interesse")

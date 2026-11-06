@@ -29,6 +29,9 @@ def importar_csv(conteudo: str) -> int:
             )
             n += 1
         s.commit()
+    from app.db import repo
+
+    repo.invalidar_vocabulario()
     return n
 
 
