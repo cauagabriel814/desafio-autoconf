@@ -21,6 +21,9 @@ class Settings(BaseSettings):
 
     # Gatilho: só vale para o WhatsApp
     trigger_keyword: str = "#thread"
+    # Com um número só: atende as mensagens que você manda para você mesmo ("Mensagem para você"). Desligado, o bot
+    # ignora tudo o que sai do próprio número.
+    aceitar_proprio_numero: str = "off"
     # Comandos de teste: reinicia a conversa / faz o agente parar de responder.
     # Só valem com TEST=on e nunca na tela de chat.
     test: str = "off"
@@ -51,6 +54,10 @@ class Settings(BaseSettings):
         p = Path(self.data_dir) / "audios"
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    @property
+    def proprio_numero_ativo(self) -> bool:
+        return self.aceitar_proprio_numero.strip().lower() in ("on", "true", "1", "sim")
 
     @property
     def comandos_ativos(self) -> bool:
