@@ -29,6 +29,9 @@ EDITAVEIS: dict[str, tuple] = {
     "nome_atendente": ("texto", "Nome da atendente", "Como o agente se apresenta.", (1, 40)),
     "nome_loja": ("texto", "Nome da loja", "Nome da revenda nas mensagens.", (1, 60)),
     "trigger_keyword": ("texto", "Palavra-chave do WhatsApp", "Sem ela o bot não responde no WhatsApp.", (2, 30)),
+    "aceitar_proprio_numero": ("opcao", "Atender o próprio número",
+                               "Para testar com um número só: no WhatsApp, abra \"Mensagem para você\" e mande "
+                               "#thread. Desligado, o bot ignora o próprio número.", ["on", "off"]),
     "test": ("opcao", "Modo de teste", "Liga os comandos de teste no WhatsApp.", ["on", "off"]),
     "reset_keyword": ("texto", "Comando para recomeçar", "Arquiva a conversa (só com modo de teste).", (2, 30)),
     "stop_keyword": ("texto", "Comando para parar", "O agente para de responder (só com modo de teste).", (2, 30)),
