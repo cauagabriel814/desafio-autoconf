@@ -423,3 +423,17 @@ def test_valor_em_conto_e_lido_do_texto_quando_a_extracao_nao_devolve():
     l2 = repo.obter_ou_criar_lead("web", "entrada-em-conto")
     aplicar(l2.id, Extracao(entrada=20000), "tenho uns 20 conto de entrada")
     assert "preco_max" not in repo.obter_lead(l2.id).ficha
+
+
+def test_escolheu_um_carro_sem_dizer_o_valor_nao_pergunta_o_valor_de_novo():
+    from app.agente.ficha import carro_escolhido
+
+    f = {"modelos_interesse": ["Chevrolet Onix Plus Premier 2023"]}
+    assert carro_escolhido(f)["preco"] == 94900
+    assert pendentes(f) == ["pagamento", "visita"]  # o preço do carro já é a faixa
+    assert "carro escolhido: Chevrolet Onix Plus Premier" in checklist(f)
+    # "Onix" tem dois no estoque: ainda não escolheu, o valor continua pendente
+    assert carro_escolhido({"modelos_interesse": ["Onix"]}) is None
+    assert pendentes({"modelos_interesse": ["Onix"]})[0] == "faixa_preco"
+    # com valor dito, vale o que ele disse
+    assert "até R$ 100.000" in checklist({**f, "preco_max": 100000})
