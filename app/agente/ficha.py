@@ -31,6 +31,9 @@ class Extracao(BaseModel):
     visita: str | None = Field(None, description="dia e/ou período em que pode ir à loja: 'sábado de manhã'")
     tipo_interesse: Literal["SUV", "Sedã", "Hatch", "Picape"] | None = None
     modelos_interesse: list[str] | None = None
+    sem_preferencia: bool | None = Field(
+        None, description="true se disse que NÃO tem marca, modelo ou tipo em mente (qualquer um, só olhando o que "
+                          "cabe no valor)")
     uso: str | None = Field(None, description="para que vai usar: cidade, estrada, família, trabalho...")
     preco_min: int | None = None
     preco_max: int | None = Field(None, description="orçamento máximo em reais inteiros (120 mil = 120000)")
@@ -98,7 +101,8 @@ def aplicar(lead_id: int, ext: Extracao, texto: str | None = None) -> dict:
         campos["intencao"] = "comprar"
     falta = pendentes(ficha)
     duvida = texto is None or bool(_DUVIDA.search(texto))  # sem texto (testes): confia na extração
-    if ext.nao_sabe and duvida and falta and falta[0] in ext.nao_sabe:
+    if ext.nao_sabe and duvida and falta and falta[0] in ext.nao_sabe and not (
+            falta[0] == "interesse" and ext.sem_preferencia):
         campos["nao_informado"] = sorted(set(ficha.get("nao_informado", [])) | {falta[0]})
     if not campos:
         return ficha
@@ -113,6 +117,8 @@ def mudou_interesse(antes: dict, ext: Extracao) -> bool:
         return True
     if ext.preco_min and ext.preco_min != antes.get("preco_min"):
         return True
+    if ext.sem_preferencia and not antes.get("sem_preferencia"):
+        return True  # "tanto faz": mostra tudo o que cabe no valor
     ja = {m.lower().strip() for m in antes.get("modelos_interesse") or []}
     # "Nissan Kicks" e "Kicks" são o mesmo carro: só conta como novo se não bate com nenhum já citado
     return any(not any(m.lower().strip() in j or j in m.lower().strip() for j in ja) for m in ext.modelos_interesse or [])
@@ -152,11 +158,14 @@ def _itens(f: dict) -> list[tuple[str, str, str, object]]:
     tipo_ou_modelo = f.get("tipo_interesse") or ", ".join(f.get("modelos_interesse") or [])
     if tipo_ou_modelo:
         interesse = (tipo_ou_modelo, None, "")
+    elif f.get("sem_preferencia"):
+        interesse = ("sem preferência (qualquer um que caiba no valor)", None, "")
     elif f.get("uso"):
         interesse = (None, f"uso: {f['uso']} (falta o tipo de carro)",
                      f"que tipo de carro combina com esse uso ({f['uso']}): SUV, sedã, hatch ou picape")
     else:
-        interesse = (None, None, "que tipo de carro procura ou para que vai usar")
+        interesse = (None, None, "se ele já tem alguma marca, modelo ou tipo de carro em mente, ou se está só "
+                                 "olhando o que cabe nesse valor")
 
     pagamento = None if f.get("quer_financiar") is None else ("financiar" if f["quer_financiar"] else "à vista")
 
@@ -265,8 +274,8 @@ def situacao_campos(ficha: dict) -> list[dict]:
     modelo = f.get("tipo_interesse") or ""
     if f.get("modelos_interesse"):
         modelo = (modelo + " · " if modelo else "") + ", ".join(f["modelos_interesse"])
-    if not modelo and f.get("uso"):
-        modelo = ""
+    if not modelo and f.get("sem_preferencia"):
+        modelo = "sem preferência (qualquer um que caiba no valor)"
     faixa = " ".join(p for p in (f"de {reais(f['preco_min'])}" if f.get("preco_min") else "",
                                  f"até {reais(f['preco_max'])}" if f.get("preco_max") else "") if p)
     pagamento = None if f.get("quer_financiar") is None else ("financiado" if f["quer_financiar"] else "à vista")
@@ -380,7 +389,7 @@ def qualificado(ficha: dict) -> bool:
     tem_visita = bool(ficha.get("visita"))
     if ficha.get("intencao") == "vender":
         return bool(ficha.get("troca_modelo") and ficha.get("troca_ano")) and tem_visita and not pendentes(ficha)
-    tem_modelo = bool(ficha.get("tipo_interesse") or ficha.get("modelos_interesse"))
+    tem_modelo = bool(ficha.get("tipo_interesse") or ficha.get("modelos_interesse") or ficha.get("sem_preferencia"))
     tem_valor = bool(ficha.get("preco_max") or ficha.get("preco_min"))
     tem_pagamento = ficha.get("quer_financiar") is not None
     return tem_modelo and tem_valor and tem_pagamento and tem_visita and not pendentes(ficha)
@@ -440,7 +449,18 @@ ROTULO_MOTIVO = {
     "urgencia": "urgência alta",
     "pediu_humano": "cliente pediu para falar com uma pessoa",
     "sem_resposta": "uma pergunta que você não sabe responder com certeza (não está no estoque)",
+    "sem_dados": "o cliente não quer ou não sabe dizer quanto quer investir nem o carro que procura",
 }
+
+
+def sem_dados(ficha: dict) -> bool:
+    """Comprando, mas não quis (ou não soube) dizer o valor NEM o carro: não dá para buscar no estoque."""
+    f = ficha or {}
+    if f.get("intencao") == "vender":
+        return False
+    pular = set(f.get("nao_informado") or []) | _desistidos(f)
+    sem_carro = "interesse" in pular or bool(f.get("sem_preferencia"))  # "tanto faz" sem valor também não dá para buscar
+    return "faixa_preco" in pular and sem_carro and not (f.get("tipo_interesse") or f.get("modelos_interesse"))
 
 
 # Por que a conversa foi para o vendedor, escrito para ele (aparece no resumo e na tela do lead, sempre)
@@ -453,6 +473,10 @@ MOTIVO_PARA_VENDEDOR = {
     "sem_resposta": "o cliente fez uma pergunta que a assistente não sabe responder (não consta no estoque: garantia, "
                     "histórico, documentação, endereço...). Responder a dúvida dele primeiro.",
     "qualificado": "lead qualificado: o cliente definiu o que quer e combinou a visita na loja. Confirmar o horário.",
+    "sem_dados": "o cliente não quis ou não soube dizer quanto quer investir nem o carro que procura, então a "
+                 "assistente não conseguiu buscar no estoque. Conversar para entender o que ele precisa.",
+    "agressivo": "o cliente xingou a assistente mais de uma vez, mesmo depois de ela pedir calma. Atender com "
+                 "tranquilidade e ver o que ele precisa.",
 }
 
 
@@ -503,4 +527,7 @@ COMO_PASSAR = {
                 "já vai falar com ele por aqui pra resolver rápido.",
     "pediu_humano": "responda que claro, sem problema nenhum, e que já chamou um vendedor para continuar com ele "
                     "por aqui.",
+    "sem_dados": "diga, com naturalidade e sem cobrar, que sem esses detalhes você não consegue procurar o carro "
+                 "certo, mas que um vendedor consegue conversar com ele e achar uma opção; que já passou o caso e "
+                 "ele vai falar por aqui. Não faça mais perguntas.",
 }

@@ -135,6 +135,10 @@ FIXAS = {
         "Poxa, vamos manter a conversa tranquila, tá? Eu tô aqui pra te ajudar a achar um carro. Procura algum?",
         "Opa, assim fica difícil, né? Bora recomeçar: me conta que carro você procura que eu te ajudo.",
     ],
+    "agressivo": [
+        "Vou chamar um dos nossos vendedores pra continuar com você por aqui, tá? Ele consegue te atender melhor.",
+        "Deixa que eu passo você pra um vendedor, ele já vai falar contigo por aqui.",
+    ],
     "audio_ruim": [
         "Não consegui ouvir bem seu áudio. Pode mandar de novo ou escrever?",
         "Opa, seu áudio chegou cortado aqui. Consegue mandar de novo ou me escrever?",
@@ -292,11 +296,16 @@ repita valores que só aparecem no contexto. Na dúvida, deixe o campo nulo.
   NÃO marque troca_tem. Marque troca_tem=true apenas se ele disser que TEM um carro para dar na troca.
 - O carro que o cliente TEM para dar na troca vai SOMENTE em troca_modelo/troca_ano (e troca_tem=true).
   Ele não é interesse: não coloque em modelos_interesse nem em tipo_interesse.
+- Reclamação, cobrança ou pós-venda (documento, entrega ou defeito de um carro que ele JÁ comprou) não é
+  intenção de comprar nem de vender: deixe intencao nula.
 - intencao: "vender" se ele quer vender o carro dele para a loja ("quero vender meu Gol", "vocês
   compram carro?") sem falar em comprar outro; "comprar" se ele procura um carro. Nesse caso de venda,
   o carro dele vai em troca_modelo/troca_ano.
 - visita: o dia e/ou período que ele diz que pode ir à loja ("sábado de manhã", "amanhã depois das 18h",
   "segunda"). Só se for sobre ir à loja; "preciso do carro até sexta" é urgência, não visita.
+- sem_preferencia: true se, respondendo se tem marca, modelo ou tipo em mente, ele disser que não tem
+  ("qualquer um", "tanto faz", "só tô olhando", "o que couber no valor", "nenhum em especial").
+  Se ele disser uma marca, modelo ou tipo, NÃO marque sem_preferencia.
 - nao_sabe: só o item que a atendente acabou de perguntar, se o cliente disser que não sabe.
 - Se ele disser que não sabe ou não quer informar algo que foi perguntado, coloque o item em nao_sabe.
 - proximo_passo só se ele aceitar algo concreto: visita, test drive, contato do vendedor.
