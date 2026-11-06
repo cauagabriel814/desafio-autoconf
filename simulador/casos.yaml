@@ -18,7 +18,7 @@
 #   depois_do_turno: [{turno: N, nao_cita: [...]}] respostas a partir do turno N+1 não podem conter os termos
 #                   (usado para garantir que o agente não volta em pergunta já respondida)
 #
-# Estoque de referência (20 carros) em app/db/estoque.csv.
+# Estoque de referência (22 carros) em app/db/estoque.csv.
 
 - id: 1-suv-troca-financiamento
   descricao: "SUV até 120 mil, Gol 2018 na troca, quer financiar"
@@ -177,13 +177,14 @@
 
 - id: x8-primeiro-carro
   descricao: "Primeiro carro, econômico, até 60 mil"
-  esperado: "Mostrar o Kwid (único até 60 mil) e anotar que é o primeiro carro."
+  esperado: "Anotar o valor e que é o primeiro carro; pergunta se tem marca/modelo/tipo em mente antes de listar."
   mensagens:
     - "É meu primeiro carro, queria algo econômico até uns 60 mil"
+    - "Tanto faz, o que couber"
   verificar:
     cita: ["kwid"]
     nao_cita: ["polo", "argo", "onix", "compass"]
-    ficha: { primeiro_carro: true }
+    ficha: { primeiro_carro: true, preco_max: 60000 }
 
 - id: x9-preco-civic
   descricao: "Pergunta direta de preço"
@@ -441,12 +442,12 @@
     cita_algum: ["a vista", "financ", "gostou", "curtiu", "interessou"]
 - id: x36-so-o-uso
   descricao: "Cliente diz só o uso, sem o tipo de carro"
-  esperado: "Perceber que falta o tipo e perguntar (sugerindo opções) antes da faixa de preço."
+  esperado: "Perceber que falta o valor e perguntar primeiro (o tipo vem depois)."
   mensagens:
     - "Quero um carro pra família"
   verificar:
     no_turno:
-      - { turno: 1, cita_algum: ["suv", "seda", "hatch", "picape", "tipo"] }
+      - { turno: 1, cita_algum: ["quanto", "investir", "valor", "orcamento"] }
 
 - id: x41-lista-todos-os-suvs
   descricao: "Cliente pede SUV sem dizer o valor"
@@ -739,12 +740,12 @@
 
 - id: c09-modelo-pelo-perfil
   descricao: "Interesse dito pelo perfil ('pequeno e econômico')"
-  esperado: "Não inventar o tipo: perguntar ou sugerir hatch, sem qualificar."
+  esperado: "Não inventar o tipo: pergunta o valor primeiro (o tipo vem depois), sem qualificar."
   mensagens:
     - "Quero um carro pequeno e econômico pra cidade"
   verificar:
     status: bot
-    cita_algum: ["hatch", "kwid", "onix", "argo", "hb20", "polo", "tipo"]
+    cita_algum: ["quanto", "investir", "valor", "orcamento"]
 
 - id: c10-fora-de-ordem
   descricao: "Cliente responde primeiro o pagamento, depois o valor, depois o modelo"
@@ -920,3 +921,186 @@
   verificar:
     status: bot
     ficha: { tipo_interesse: null }
+
+# ---------- Caminhos tristes (t01-t16) ----------
+
+- id: t01-nenhum-carro-no-valor
+  descricao: "Valor menor que o carro mais barato do estoque"
+  esperado: "Dizer com clareza que não há carro nesse valor e mostrar o mais perto, sem inventar."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Até 20 mil"
+  verificar:
+    cita_algum: ["kwid", "52.900"]
+    transferiu: false
+
+- id: t02-marca-que-nao-temos
+  descricao: "Pede uma marca que a loja não tem"
+  esperado: "Dizer que não tem essa marca e mostrar o que cabe no valor; segue o fluxo."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Até 100 mil"
+    - "Queria uma Ferrari"
+  verificar:
+    cita_algum: ["nao temos", "nao tenho", "nao tem", "nao trabalh", "nao esta no estoque", "nao consta"]
+    cita_algum_2: ["kwid", "hb20", "argo", "onix", "cronos", "duster", "dolphin", "polo", "cruze"]
+    transferiu: false
+    nao_cita: ["ferrari 20"]
+
+- id: t03a-so-o-valor-pergunta-a-marca
+  descricao: "Disse só o valor"
+  esperado: "Não lista tudo: pergunta se tem marca, modelo ou tipo em mente (ou se está só olhando)."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Uns 100 mil"
+  verificar:
+    cita_algum: ["marca", "modelo", "tipo", "olhando", "em mente"]
+    nao_cita: ["kwid", "hb20", "argo", "onix", "cronos", "duster"]
+
+- id: t03b-tanto-faz-lista-no-valor
+  descricao: "Sem preferência de marca"
+  esperado: "Mostra tudo o que cabe no valor, do mais barato ao mais caro."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Uns 100 mil"
+    - "Tanto faz, só tô olhando o que tem"
+  verificar:
+    cita_algum: ["kwid", "hb20", "argo"]
+    lista_em_ordem_de_preco: true
+    transferiu: false
+
+- id: t04-nao-responde-nada
+  descricao: "Cliente se recusa a dizer valor e carro"
+  esperado: "Depois de insistir uma vez, passa para um vendedor (motivo sem_dados) em vez de ficar em laço."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Não vou falar isso"
+    - "Não quero dizer"
+    - "Já falei que não vou dizer"
+    - "Não vou responder"
+  verificar:
+    transferiu: true
+    motivo: sem_dados
+
+- id: t05-nao-sei-valor-nem-carro
+  descricao: "Cliente não sabe o valor nem o carro"
+  esperado: "Passa para o vendedor, que conversa com ele (sem_dados)."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Não sei quanto"
+    - "Não sei qual carro também"
+  verificar:
+    transferiu: true
+    motivo: sem_dados
+
+- id: t06-recusa-so-o-valor
+  descricao: "Não quer dizer o valor, mas diz o tipo"
+  esperado: "Segue o atendimento: mostra os SUVs e não transfere."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Prefiro não dizer o valor"
+    - "Queria um SUV"
+  verificar:
+    cita_algum: ["duster", "kicks", "creta", "t-cross"]
+    transferiu: false
+
+- id: t07-xingamento-uma-vez
+  descricao: "Cliente xinga a atendente"
+  esperado: "Pede calma sem transferir ainda."
+  mensagens:
+    - "Oi"
+    - "Vai se f*der, sua idiota inútil"
+  verificar:
+    bloqueio_entrada: ofensivo
+    transferiu: false
+
+- id: t08-xingamento-duas-vezes
+  descricao: "Cliente xinga de novo depois do pedido de calma"
+  esperado: "Passa para um vendedor, com motivo agressivo."
+  mensagens:
+    - "Oi"
+    - "Vai se f*der, sua idiota inútil"
+    - "Você é uma imbecil, burra do caralho"
+  verificar:
+    transferiu: true
+    motivo: agressivo
+
+- id: t09-xingando-com-reclamacao
+  descricao: "Cliente xinga mas tem uma reclamação real"
+  esperado: "Trata como reclamação: desculpas e passa para uma pessoa."
+  mensagens:
+    - "Que porra de atendimento é esse, vocês são uns ladrões! Comprei um carro aí e até hoje não recebi o documento, vou no Procon!"
+  verificar:
+    transferiu: true
+    motivo: reclamacao
+
+- id: t10-mensagem-sem-sentido
+  descricao: "Teclado aleatório"
+  esperado: "Não quebra: pergunta com jeito o que ele procura."
+  mensagens:
+    - "asdfgh jkl"
+  verificar:
+    transferiu: false
+
+- id: t11-desiste-no-meio
+  descricao: "Cliente desiste da compra"
+  esperado: "Despede-se com educação, sem insistir nem empurrar vendedor."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Até 80 mil"
+    - "Deixa pra lá, não quero mais, tchau"
+  verificar:
+    transferiu: false
+
+- id: t12-so-fora-do-assunto
+  descricao: "Cliente só fala de outro assunto, três vezes"
+  esperado: "Segue educada, puxando de volta para carros, sem transferir nem travar."
+  mensagens:
+    - "Qual a cotação do dólar hoje?"
+    - "Quem ganhou o jogo ontem?"
+    - "Me passa uma receita de bolo"
+  verificar:
+    bloqueio_entrada: fora_do_assunto
+    transferiu: false
+
+- id: t13-pergunta-sem-resposta-no-estoque
+  descricao: "Pergunta algo que o estoque não tem"
+  esperado: "Não inventa: passa para o vendedor confirmar (sem_resposta)."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Até 100 mil"
+    - "Tanto faz"
+    - "O Onix tem garantia de fábrica ainda e algum histórico de batida?"
+  verificar:
+    transferiu: true
+    motivo: sem_resposta
+
+- id: t14-quer-falar-com-gente
+  descricao: "Cliente irritado com a assistente"
+  esperado: "Passa para uma pessoa sem argumentar."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Para de me fazer perguntas, quero falar com um vendedor de verdade"
+  verificar:
+    transferiu: true
+    motivo: pediu_humano
+
+- id: t15-valor-absurdo
+  descricao: "Valor impossível (1 milhão)"
+  esperado: "Mostra o que a loja tem, sem inventar carro de luxo."
+  mensagens:
+    - "Quero comprar um carro"
+    - "Até 1 milhão"
+    - "Qualquer um"
+  verificar:
+    nao_cita: ["ferrari", "porsche", "mercedes", "bmw"]
+    transferiu: false
+
+- id: t16-valor-e-marca-tudo-junto-sem-estoque
+  descricao: "Marca que não tem, valor que não cabe"
+  esperado: "Diz que não tem e mostra o mais próximo, sem enrolar."
+  mensagens:
+    - "Quero um Toyota Hilux até 50 mil"
+  verificar:
+    cita_algum: ["nao temos", "nao tenho", "nao tem", "nao trabalh", "nao esta no estoque"]
+    transferiu: false

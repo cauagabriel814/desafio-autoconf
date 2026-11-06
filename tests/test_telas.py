@@ -248,8 +248,9 @@ def test_rodar_testes_pela_tela(client, monkeypatch, tmp_path):
     assert s["casos"][1]["detalhe"] == "cita algum"
     assert s["total"] == 7 and "6b-audio-ruido" in s["faltam"]  # a barra sabe quantos casos o grupo tem
     assert len(rodada.ids_do_grupo("pdf")) == 7
-    assert len(rodada.ids_do_grupo("coleta")) == 21 and len(rodada.ids_do_grupo("todos")) == 78
+    assert len(rodada.ids_do_grupo("coleta")) == 21 and len(rodada.ids_do_grupo("todos")) == 95
     assert len(rodada.ids_do_grupo("autoconf")) == 6
+    assert len(rodada.ids_do_grupo("tristes")) == 17
     assert chamadas[0][1:] == ["-u", "-m", "simulador", "1", "2", "3", "4", "5", "6"]
 
 

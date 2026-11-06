@@ -19,6 +19,7 @@ GRUPOS = {
     "pdf": ("Casos do PDF", ["1", "2", "3", "4", "5", "6"]),
     "coleta": ("Coleta básica", ["c"]),
     "autoconf": ("Respostas da Autoconf", ["a"]),
+    "tristes": ("Caminhos tristes", ["t0", "t1"]),
     "todos": ("Todos (com humanidade)", ["--tom"]),
 }
 CASOS_YAML = Path(__file__).resolve().parents[2] / "simulador" / "casos.yaml"
