@@ -191,10 +191,11 @@ def _itens(f: dict) -> list[tuple[str, str, str, object]]:
              "que dia e período ele consegue trazer o carro na loja para a avaliação", f.get("visita"), None),
         ]
 
-    # Compra: modelo, valor, como quer comprar e, por fim, o dia da visita para ver o carro.
+    # Compra: valor, modelo, como quer comprar e, por fim, o dia da visita para ver o carro.
+    # O valor vem primeiro: com ele já dá para listar tudo o que cabe e o cliente escolhe o carro vendo a lista.
     itens = [
-        ("interesse", "Modelo / tipo de carro", interesse[2], interesse[0], interesse[1]),
         ("faixa_preco", "Valor", "até quanto pensa em investir", faixa, None),
+        ("interesse", "Modelo / tipo de carro", interesse[2], interesse[0], interesse[1]),
         ("pagamento", "Como quer comprar", "se pensa em pagar à vista ou financiar", pagamento, None),
     ]
     # Complemento (não é pergunta fixa): o cliente CITOU um carro de troca (modelo ou ano) mas faltou a outra parte.
@@ -364,7 +365,8 @@ def checklist(ficha: dict) -> str:
         linhas.append("Agora é hora de convidar para vir à loja: pergunte o dia e o período. Não diga que o horário "
                       "está garantido: o vendedor confirma depois.")
     else:
-        linhas.append("Ainda faltam itens: NÃO ofereça vendedor, visita nem test drive por enquanto.")
+        linhas.append("Ainda faltam itens: NÃO ofereça vendedor, visita nem test drive por enquanto. Faça SÓ a "
+                      "PRÓXIMA PERGUNTA, uma por mensagem: não junte com os outros itens ⬜ (eles ficam para depois).")
     return "\n".join(linhas)
 
 

@@ -502,7 +502,7 @@
   esperado: "Mostrar os hatches na hora e perguntar o valor; com o valor, mostrar só os que cabem nele."
   mensagens:
     - "Olá quero comprar um carro"
-    - "Não sei queria um hatch"
+    - "Queria um hatch"
     - "Uns 70 mil"
   verificar:
     no_turno:

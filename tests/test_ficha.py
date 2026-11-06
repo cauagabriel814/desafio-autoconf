@@ -98,10 +98,12 @@ def test_mudou_interesse():
 
 # ---------- checklist ----------
 
-def test_compra_na_ordem_modelo_valor_pagamento_visita():
+def test_compra_na_ordem_valor_modelo_pagamento_visita():
+    # o valor vem primeiro: com ele dá para listar tudo o que cabe e o cliente escolhe vendo a lista
     c = checklist({})
-    assert "⬜ Modelo / tipo de carro  ← PRÓXIMA PERGUNTA" in c
-    assert pendentes({}) == ["interesse", "faixa_preco", "pagamento", "visita"]
+    assert "⬜ Valor  ← PRÓXIMA PERGUNTA" in c
+    assert pendentes({}) == ["faixa_preco", "interesse", "pagamento", "visita"]
+    assert pendentes({"preco_max": 100000}) == ["interesse", "pagamento", "visita"]
 
 
 def test_caso_1_do_pdf_falta_so_a_visita():
@@ -269,7 +271,7 @@ def test_transferir_nao_vai_para_a_ficha():
 
 
 def test_so_o_uso_e_parcial_e_pergunta_o_tipo():
-    f = {"uso": "família"}
+    f = {"uso": "família", "preco_max": 100000}
     assert pendentes(f)[0] == "interesse"
     c = checklist(f)
     assert "🟡 Modelo / tipo de carro: uso: família (falta o tipo de carro)  ← PRÓXIMA PERGUNTA" in c
