@@ -61,14 +61,23 @@ def perguntar_escolha(ficha: dict) -> bool:
     return bool(falta) and falta[0] in ("interesse", "pagamento", "visita") and not ficha.get("modelos_interesse")
 
 
-def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = False) -> str:
+def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = False, dizer_unico: bool = True) -> str:
     """Depois da lista: a pergunta EXATA que vem a seguir (calculada pelo código, não escolhida pelo agente).
 
     `unico`: a lista tem um carro só. Aí não há com quem comparar ("o mais novinho" não faz sentido):
     o agente avisa, de um jeito humano, que é o único que a loja tem com aquele pedido.
+    `dizer_unico`: falso quando o cliente perguntou por UM modelo específico ("quanto tá o T-Cross?"): dizer "é o
+    único" seria enganoso. Aí o agente responde direto o que ele perguntou.
     """
     prox = PERGUNTA_ESCOLHA if perguntar_escolha(ficha) else ficha_mod.proxima_pergunta(ficha)
-    if unico:
+    if unico and not dizer_unico:
+        base = (
+            "Como montar a mensagem: 1) responda direto ao que o cliente perguntou sobre esse carro, numa FRASE corrida "
+            "(não numa lista nem com traço no começo), com o nome, o ano, os km e o preço do jeito que está na lista "
+            "(ex.: \"O T-Cross Comfortline 2023 tá R$ 118.500, com 19.000 km\"); 2) comente só o carro em si, sem dizer "
+            "que é o único e sem comparar com outros (nada de \"o mais novinho\" ou \"o mais em conta\"). "
+        )
+    elif unico:
         base = (
             "Como montar a mensagem: 1) uma frase curta reagindo ao que o cliente acabou de dizer, sem \"Aqui "
             "estão\"; 2) o carro da lista numa FRASE corrida, não numa lista nem com traço no começo, dizendo o "
@@ -146,8 +155,12 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
     `ja_comentado`: comentários que o agente já fez (para não repetir).
     `mostrados`: últimas mensagens do agente; se os carros desta lista já estão nelas, não se lista de novo.
     """
-    def fecho(carros: list[dict]) -> str:
-        return _fecho(ficha, ja_comentado, unico=len(carros) == 1)
+    def fecho(carros: list[dict], pedidos: list[str] | None = None) -> str:
+        """`pedidos`: o que o cliente nomeou. Marca sozinha (BYD) com um carro só = é o único dela;
+        modelo específico (T-Cross) = só responde sobre ele."""
+        so_marca = not pedidos or all(repo._sem_acento(p).strip() == repo._sem_acento(carros[0]["marca"]).strip()
+                                      for p in pedidos)
+        return _fecho(ficha, ja_comentado, unico=len(carros) == 1, dizer_unico=so_marca)
 
     def retoma(carros: list[dict]) -> str | None:
         """O carro único da lista já foi mostrado na mensagem anterior: retoma em palavras, sem repetir a linha."""
@@ -166,25 +179,24 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
     modelos = modelos_agora or []
     achados, faltando = [], []
     for m in modelos:
-        r = repo.buscar_carros(texto=m)
+        r = [c for c in repo.buscar_carros(texto=m) if repo.combina_texto(m, c)]
         if r:
             achados += [c for c in r if c not in achados]
         else:
             faltando.append(m)
 
-    if achados:
-        if (r := retoma(achados[:MAX_CARROS])):
-            return r
-        lista ="\n".join(_linha_carro(c) for c in achados[:MAX_CARROS])
+    if achados:  # ele nomeou o carro agora ("quanto tá o T-Cross?"): responde de novo, mesmo que já tenha mostrado
+        lista = "\n".join(_linha_carro(c) for c in achados[:MAX_CARROS])
         return (f"MOSTRE AGORA, nesta mensagem, o(s) carro(s) que o cliente pediu:\n{lista}\n"
-                f"{destaques(achados[:MAX_CARROS])}\n{fecho(achados[:MAX_CARROS])}")
+                f"{destaques(achados[:MAX_CARROS])}\n{fecho(achados[:MAX_CARROS], modelos)}")
 
     # O cliente já pediu um carro ou marca (ex.: "um BYD") e agora só afinou o valor: a lista continua sendo DELE,
     # não de todo o estoque até aquele preço
     if not modelos and (pmax or pmin):
         do_interesse: list[dict] = []
         for m in ficha.get("modelos_interesse") or []:
-            do_interesse += [c for c in repo.buscar_carros(texto=m, tipo=tipo) if c not in do_interesse]
+            do_interesse += [c for c in repo.buscar_carros(texto=m, tipo=tipo)
+                             if repo.combina_texto(m, c) and c not in do_interesse]
         if do_interesse:
             cabem = [c for c in do_interesse if (not pmax or c["preco"] <= pmax) and (not pmin or c["preco"] >= pmin)]
             if cabem:
@@ -193,7 +205,7 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
                 lista ="\n".join(_linha_carro(c) for c in sorted(cabem, key=lambda c: c["preco"])[:MAX_CARROS])
                 return (f"O cliente já pediu {', '.join(ficha['modelos_interesse'])} e agora disse o valor. MOSTRE AGORA, "
                         "nesta mensagem, só os carros que ele pediu e que cabem no valor (não ofereça outros modelos "
-                        f"nem outras marcas):\n{lista}\n{destaques(cabem[:MAX_CARROS])}\n{fecho(cabem[:MAX_CARROS])}")
+                        f"nem outras marcas):\n{lista}\n{destaques(cabem[:MAX_CARROS])}\n{fecho(cabem[:MAX_CARROS], ficha['modelos_interesse'])}")
             if not tipo:  # tem o que ele quer no estoque, mas fora do valor: diz isso e mostra o mais perto
                 alvo = pmax or pmin
                 perto = sorted(sorted(do_interesse, key=lambda c: abs(c["preco"] - alvo))[:3], key=lambda c: c["preco"])
@@ -210,8 +222,10 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
         sem_valor = not (pmax or pmin)
         if not parecidos and not sem_valor:
             parecidos = repo.buscar_carros(preco_max=pmax, preco_min=pmin)  # outro tipo, mas cabe no orçamento
+        fora_do_valor = False
         if not parecidos and tipo:
             parecidos = repo.buscar_carros(tipo=tipo)
+            fora_do_valor = bool(parecidos and (pmax or pmin))
         parecidos.sort(key=lambda c: c["preco"])
         pedir_valor = (" No fim, pergunte SÓ isto: até quanto ele pensa em investir, para você mostrar mais opções "
                        "nessa faixa de preço." if sem_valor else "")
@@ -227,6 +241,12 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
                 f"mensagem, sugira estes parecidos, um por linha (nome, ano, km e preço):\n{lista}\n{pedir_valor}"
             )
         lista = "\n".join(_linha_carro(c) for c in parecidos[:MAX_CARROS])
+        if fora_do_valor:
+            return (
+                f"O cliente pediu {', '.join(faltando)}, que NÃO está no estoque, e nenhum carro parecido cabe no valor "
+                f"dele. Diga as duas coisas com clareza e que estes são os mais próximos, mas ficam ACIMA do valor "
+                f"dele (um por linha, nome, ano, km e preço):\n{lista}\n{fecho(parecidos[:MAX_CARROS])}"
+            )
         return (
             f"O cliente pediu {', '.join(faltando)}, que NÃO está no estoque. Diga isso com clareza e, "
             f"na MESMA mensagem, ofereça TODOS estes, que cabem no que ele procura, um por linha (nome, ano, km e "
@@ -251,8 +271,9 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
     proximos = sorted(proximos[:3], key=lambda c: c["preco"])  # os 3 mais próximos, em ordem de preço
     lista = "\n".join(_linha_carro(c) for c in proximos)
     return (
-        "Nenhum carro do estoque bate exatamente com o que o cliente pediu. Diga isso com clareza e "
-        f"sugira estes, que são os mais próximos do pedido:\n{lista}"
+        "Nenhum carro do estoque bate exatamente com o que o cliente pediu (nesse valor não temos nada). Diga isso "
+        f"com clareza e sugira estes, que são os mais próximos do pedido:\n{lista}\n"
+        "No fim, pergunte SÓ se ele consegue chegar perto desse valor. Não pergunte mais nada."
     )
 
 
@@ -356,8 +377,8 @@ def faltando_para_qualificar(ficha: dict) -> list[str]:
         return falta
     if not (f.get("preco_max") or f.get("preco_min")):
         falta.append("até quanto ele pensa em investir")
-    if not (f.get("tipo_interesse") or f.get("modelos_interesse")):
-        falta.append("que tipo de carro ele procura (SUV, sedã, hatch ou picape)")
+    if not (f.get("tipo_interesse") or f.get("modelos_interesse") or f.get("sem_preferencia")):
+        falta.append("se ele tem alguma marca, modelo ou tipo de carro em mente")
     if f.get("quer_financiar") is None:
         falta.append("se vai pagar à vista ou financiar")
     if not f.get("visita"):
@@ -457,11 +478,21 @@ def _construir(lead_id: int, callbacks: list):
         # Pediu para ver ("quais vocês têm?") e já sabemos o que procura: mostra a lista, mesmo sem nada novo
         if pediu_lista and not novo and (ficha_agora.get("tipo_interesse") or tem_valor):
             novo = True
+        # Só o valor, sem saber o que ele procura: primeiro pergunta se tem marca, modelo ou tipo em mente
+        # (a lista sai na resposta dessa pergunta, com o limite de preço)
+        sabe_o_que_quer = bool(ficha_agora.get("tipo_interesse") or ficha_agora.get("modelos_interesse")
+                               or ficha_agora.get("sem_preferencia"))
+        nada_cabe = tem_valor and not repo.buscar_carros(preco_max=ficha_agora.get("preco_max"),
+                                                         preco_min=ficha_agora.get("preco_min"))
+        if novo and not sabe_o_que_quer and not pediu_lista and not nada_cabe:
+            novo = False  # (se nenhum carro cabe no valor, avisa já em vez de perguntar a marca)
         # Escolheu um carro da lista que acabou de ver: não mostra a lista de novo, reage e segue
-        if escolha_respondida and novo and modelos and not pediu_lista and all(repo.buscar_carros(texto=m) for m in modelos):
+        if escolha_respondida and novo and modelos and not pediu_lista and all(any(repo.combina_texto(m, c) for c in repo.buscar_carros(texto=m)) for m in modelos):
             novo = False
         # Visita combinada = lead qualificado: vai para o vendedor com resumo (regra em código)
         ficha_final = repo.obter_lead(lead_id).ficha or {}
+        if not ext.transferir and ficha_mod.sem_dados(ficha_final) and not ficha_mod.qualificado(ficha_final):
+            ext.transferir = "sem_dados"  # não quer ou não sabe dizer valor nem carro: vendedor conversa com ele
         if not ext.transferir and ficha_mod.qualificado(ficha_final):
             ext.transferir = "qualificado"
             para = "avaliação do carro" if ficha_final.get("intencao") == "vender" else "ver o carro"
