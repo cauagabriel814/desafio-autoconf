@@ -43,7 +43,8 @@ def tipo_suportado(mime: str | None, tamanho: int) -> tuple[str, str | None]:
 _ALIASES = [
     (r"\bbuild\s*i\.?\s*d\b|\bbi\s*-?\s*wai\s*-?\s*di\b|\bbi\s*-?\s*uai\s*-?\s*di\b|\bbiwaidi\b|\bbiuaidi\b"
      r"|\bbai\s*-?\s*di\b|\bbaidi\b|\bb\s*y\s*d\b|\bbê\s*ípsilon\s*dê\b|\bby\s+de\b", "BYD"),
-    (r"\bv[eê]\s*d[aá]bli[uo]\b|\bv[eê]\s*dabl[ií]u\b|\bfolks?\b|\bf[oó]lquis\b|\bvolks\b", "VW"),
+    (r"\bv[eê]\s*d[aá]bli[uo]\b|\bv[eê]\s*dabl[ií]u\b|\bfolks?\b|\bf[oó]lquis\b|\bvolks\b"
+     r"|\bvolkswagen\b|\bwv\b|\bw\s+v\b", "VW"),
     (r"\bag[aá]\s*b[eê]\s*vinte\b|\bh\s*b\s*vinte\b|\bh\s*b\s*20\b", "HB20"),
     (r"\bt\s*cross\b|\bti\s*cross\b|\bt[eê]\s*cross\b|\btecross\b", "T-Cross"),
     (r"\bag[aá]\s*erre\s*v[eê]\b|\bhr\s*v\b", "HR-V"),
@@ -61,12 +62,61 @@ _ALIASES_AUDIO = [
 ]
 
 
+def _sem_acento(t: str) -> str:
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFD", t) if unicodedata.category(c) != "Mn").lower()
+
+
+def _vocabulario_de_carros() -> dict[str, str]:
+    """Palavras de marca e modelo (sem acento, minúsculas) -> como escrever. Só as de 5 letras ou mais."""
+    from app.catalogo import CATALOGO
+    from app.db import repo
+
+    palavras: dict[str, str] = {}
+    for c in repo.buscar_carros(apenas_disponiveis=False):
+        for p in (c["marca"], c["modelo"].split()[0]):
+            palavras[_sem_acento(p)] = p
+    for marca, modelos in CATALOGO.items():
+        palavras[_sem_acento(marca)] = marca
+        for mod in modelos:
+            palavras[_sem_acento(mod.split()[0])] = mod.split()[0]
+    return {k: v for k, v in palavras.items() if len(k) >= 5 and k.isalpha()}
+
+
+def corrigir_digitacao(texto: str) -> str:
+    """Marca ou modelo escrito com erro ("hiunday", "toyta", "corola") vira o nome certo do estoque.
+
+    Só palavras de 5+ letras e bem parecidas (85%) com uma marca ou modelo real, para não mexer em português comum.
+    """
+    import difflib
+    import re
+
+    vocab = _vocabulario_de_carros()
+    if not vocab:
+        return texto
+    chaves = list(vocab)
+
+    def troca(m: re.Match) -> str:
+        palavra = m.group(0)
+        chave = _sem_acento(palavra)
+        if len(chave) < 5 or chave in vocab:
+            return palavra
+        achado = difflib.get_close_matches(chave, chaves, n=1, cutoff=0.85)
+        return vocab[achado[0]] if achado else palavra
+
+    return re.sub(r"[A-Za-zÀ-ú]+", troca, texto)
+
+
 def normalizar_nomes(texto: str, audio: bool = False) -> str:
     import re
 
     for padrao, certo in _ALIASES + (_ALIASES_AUDIO if audio else []):
         texto = re.sub(padrao, certo, texto, flags=re.IGNORECASE)
-    return texto
+    try:
+        return corrigir_digitacao(texto)
+    except Exception:  # a correção é um extra: nunca derruba o atendimento
+        return texto
 
 
 def vocabulario() -> str:
