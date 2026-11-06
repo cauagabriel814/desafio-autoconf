@@ -467,3 +467,23 @@ def test_webhook_comando_parar(client, evolution_fake):
 
 def test_webhook_evento_desconhecido(client, evolution_fake):
     assert client.post("/webhook/evolution", json={"event": "connection.update"}).json()["ignorado"] == "ruido"
+
+
+def test_bolha_do_lead_nao_tem_linhas_em_branco_entre_o_texto_e_o_horario(client):
+    # a bolha usa white-space: pre-wrap, então qualquer quebra de linha no HTML vira um espaço grande antes da hora
+    import re
+    import uuid as _uuid
+
+    from app.db import repo
+
+    cid = f"web-{_uuid.uuid4().hex[:6]}"
+    lead = repo.obter_ou_criar_lead("web", cid)
+    repo.salvar_mensagem(lead.id, "cliente", "consigo ir de manhã", "texto")
+    repo.salvar_mensagem(lead.id, "agente", "Combinado! Qual dia?", "texto", status="enviada")
+    html = client.get(f"/painel/lead/{lead.id}").text
+    bolhas = re.findall(r'<div class="bolha [^"]*">(.*?)</div>', html, re.S)
+    assert len(bolhas) == 2
+    for b in bolhas:
+        texto, resto = b.split('<span class="meta">', 1)
+        assert texto.strip() == texto and "\n" not in texto  # nada entre o texto e o horário
+        assert resto.endswith("</span>")
