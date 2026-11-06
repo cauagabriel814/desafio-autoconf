@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import logging
+import time
 from typing import Awaitable, Callable
 
 import httpx
@@ -40,17 +41,47 @@ async def _get(caminho: str) -> dict:
         return r.json()
 
 
+# O que o próprio bot enviou: com "Atender o próprio número" ligado, a resposta da Lia volta como mensagem do próprio
+# número, e ela não pode responder a si mesma. Guardamos o id e o texto de cada envio, e ignoramos mensagens do próprio
+# número enquanto um envio está em andamento (o webhook pode chegar antes da resposta do envio).
+_ids_enviados: dict[str, float] = {}
+_textos_enviados: dict[str, float] = {}
+_envios_em_andamento = 0
+_VALIDADE_ENVIADOS = 600  # segundos
+
+
+def _limpar_enviados() -> None:
+    corte = time.time() - _VALIDADE_ENVIADOS
+    for memoria in (_ids_enviados, _textos_enviados):
+        for k in [k for k, quando in memoria.items() if quando < corte]:
+            memoria.pop(k, None)
+
+
+async def _enviar(caminho: str, corpo: dict, texto: str | None = None) -> None:
+    global _envios_em_andamento
+    _envios_em_andamento += 1
+    try:
+        if texto:
+            _textos_enviados[texto.strip()] = time.time()
+        resposta = await _post(caminho, corpo)
+        if isinstance(resposta, dict) and (mid := (resposta.get("key") or {}).get("id")):
+            _ids_enviados[mid] = time.time()
+    finally:
+        _envios_em_andamento -= 1
+        _limpar_enviados()
+
+
 async def enviar_texto(numero: str, texto: str, digitando_ms: int = 0) -> None:
     """`digitando_ms`: a Evolution mostra "digitando…" por esse tempo antes de entregar o balão."""
     corpo = {"number": numero, "text": texto}
     if digitando_ms:
         corpo["delay"] = digitando_ms
-    await _post(f"/message/sendText/{settings.evolution_instance}", corpo)
+    await _enviar(f"/message/sendText/{settings.evolution_instance}", corpo, texto)
 
 
 async def enviar_audio(numero: str, audio_nome: str) -> None:
     dados = (settings.audios_dir / audio_nome).read_bytes()
-    await _post(
+    await _enviar(
         f"/message/sendWhatsAppAudio/{settings.evolution_instance}",
         {"number": numero, "audio": base64.b64encode(dados).decode()},
     )
@@ -133,6 +164,25 @@ async def qrcode_instancia() -> str | None:
 
 # ---------- Entrada: webhook -> mensagem padrão ----------
 
+def _numero(jid: str | None) -> str:
+    return (jid or "").split("@")[0].split(":")[0]
+
+
+def _vale_mensagem_do_proprio_numero(body: dict, data: dict, key: dict) -> bool:
+    """Mensagem que saiu do número conectado: só vale na conversa com você mesmo ("Mensagem para você"), com a opção
+    ligada, e nunca se foi o próprio bot que enviou (senão ele responderia a si mesmo em laço)."""
+    if not settings.proprio_numero_ativo:
+        return False
+    if _envios_em_andamento or key.get("id") in _ids_enviados:
+        return False
+    msg = data.get("message") or {}
+    texto = msg.get("conversation") or (msg.get("extendedTextMessage") or {}).get("text") or ""
+    if texto.strip() and texto.strip() in _textos_enviados:
+        return False
+    dono = _numero(body.get("sender"))
+    chat = {_numero(key.get("remoteJid")), _numero(key.get("senderPn")), _numero(key.get("remoteJidAlt"))} - {""}
+    return bool(dono) and dono in chat  # conversa com outra pessoa nunca entra
+
 def converter(body: dict) -> MensagemEntrada | None:
     """Converte o evento messages.upsert. Devolve None para ruído (fromMe, grupo, status, tipo sem suporte)."""
     evento = str(body.get("event", "")).lower().replace("_", ".")
@@ -143,7 +193,9 @@ def converter(body: dict) -> MensagemEntrada | None:
         data = data[0] if data else {}
     key = data.get("key") or {}
     jid = key.get("remoteJid", "")
-    if key.get("fromMe") or jid.endswith("@g.us") or jid == "status@broadcast" or "@newsletter" in jid:
+    if jid.endswith("@g.us") or jid == "status@broadcast" or "@newsletter" in jid:
+        return None
+    if key.get("fromMe") and not _vale_mensagem_do_proprio_numero(body, data, key):
         return None
     if jid.endswith("@lid"):
         jid = key.get("senderPn") or key.get("remoteJidAlt") or jid
