@@ -13,14 +13,14 @@
           {% for t in c.turnos %}
             <div class="bolha cliente">{{ t.cliente }}</div>
             <div class="bolha agente">{{ t.agente }}
-              {% if t.tools or t.bloqueio_entrada or t.bloqueios_saida or t.audio %}
+              {%- if t.tools or t.bloqueio_entrada or t.bloqueios_saida or t.audio -%}
               <span class="meta-t">
-                {% for tool in t.tools %}<span class="chip">{{ tool }}</span> {% endfor %}
-                {% if t.audio %}<span class="chip">resposta em áudio</span>{% endif %}
-                {% if t.bloqueio_entrada %}<span class="chip">guardrail de entrada: {{ t.bloqueio_entrada }}</span>{% endif %}
-                {% for b in t.bloqueios_saida %}<span class="chip">guardrail de saída barrou: {{ b }}</span> {% endfor %}
+                {%- for tool in t.tools %}<span class="chip">{{ tool }}</span> {% endfor -%}
+                {%- if t.audio %}<span class="chip">resposta em áudio</span>{% endif -%}
+                {%- if t.bloqueio_entrada %}<span class="chip">guardrail de entrada: {{ t.bloqueio_entrada }}</span>{% endif -%}
+                {%- for b in t.bloqueios_saida %}<span class="chip">guardrail de saída barrou: {{ b }}</span> {% endfor -%}
               </span>
-              {% endif %}
+              {%- endif -%}
             </div>
           {% endfor %}
         </div>

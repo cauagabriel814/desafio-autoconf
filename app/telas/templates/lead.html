@@ -66,10 +66,10 @@
     <p class="conversa-titulo">Conversa completa ({{ lead.mensagens | length }} mensagens)</p>
     <div class="conversa conversa-box" id="conversa-lead" tabindex="0" aria-label="Conversa completa">
         {% for m in lead.mensagens %}
+          {#- a bolha usa white-space: pre-wrap: qualquer quebra de linha do HTML aparece como linha em branco -#}
           <div class="bolha {{ 'bloqueada' if m.status == 'bloqueada' else m.papel }}">{{ m.texto }}
-            {% if m.audio_path %}<audio controls src="/audios/{{ m.audio_path }}"></audio>{% endif %}
-            <span class="meta">{{ m.criado_em.strftime('%H:%M') }}{% if m.tipo_origem != 'texto' %} · {{ m.tipo_origem }}{% endif %}{% if m.status == 'bloqueada' %} · bloqueada pelo guardrail: {{ m.motivo_bloqueio }}{% elif m.status == 'ignorada' %} · recebida com vendedor{% endif %}</span>
-          </div>
+            {%- if m.audio_path %}<audio controls src="/audios/{{ m.audio_path }}"></audio>{% endif -%}
+            <span class="meta">{{ m.criado_em.strftime('%H:%M') }}{% if m.tipo_origem != 'texto' %} · {{ m.tipo_origem }}{% endif %}{% if m.status == 'bloqueada' %} · bloqueada pelo guardrail: {{ m.motivo_bloqueio }}{% elif m.status == 'ignorada' %} · recebida com vendedor{% endif %}</span></div>
         {% else %}
           <p class="vazio">Sem mensagens.</p>
         {% endfor %}
