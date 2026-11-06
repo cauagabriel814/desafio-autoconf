@@ -241,11 +241,45 @@ def historico(lead_id: int, n: int | None = None) -> list[Mensagem]:
 
 # ---------- Carros ----------
 
+_vocab_estoque: tuple[float, set[str], set[str]] = (0.0, set(), set())
+
+
+def _vocabulario_estoque() -> tuple[set[str], set[str]]:
+    """(marcas, palavras de marca e modelo) do estoque, sem acento. Guardado por 5 s (muda quando se edita o estoque)."""
+    global _vocab_estoque
+    agora = datetime.now().timestamp()
+    if agora - _vocab_estoque[0] > 5:
+        with SessionLocal() as s:
+            carros = s.scalars(select(Carro)).all()
+        marcas = {_sem_acento(c.marca) for c in carros}
+        palavras = {p for c in carros for p in _sem_acento(f"{c.marca} {c.modelo}").split()}
+        _vocab_estoque = (agora, marcas, palavras)
+    return _vocab_estoque[1], _vocab_estoque[2]
+
+
+def invalidar_vocabulario() -> None:
+    """Chamado quando o estoque muda (adicionar, editar, excluir, importar)."""
+    global _vocab_estoque
+    _vocab_estoque = (0.0, set(), set())
+
+
 def combina_texto(texto: str, carro: dict) -> bool:
-    """O carro bate com o que o cliente disse? Todas as palavras precisam aparecer ("Jeep Renegade" não é o Compass)."""
-    alvo = _sem_acento(f"{carro['marca']} {carro['modelo']} {carro['ano']}")
-    termos = [t for t in _sem_acento(texto).split() if len(t) > 1]
-    return bool(termos) and all(t in alvo for t in termos)
+    """O carro bate com o que o cliente disse?
+
+    - "Jeep Renegade" não é o Compass: o modelo citado (a 1ª palavra que não é marca) precisa existir no estoque.
+    - Números ("1.0", "2022") e palavras que nenhum carro do estoque tem ("Turbo", "Flex") não atrapalham:
+      "Chevrolet Onix LT 1.0 Turbo 2022" bate com o Onix LT.
+    - As palavras que o estoque conhece (Corolla, Cross, LT...) precisam estar todas neste carro.
+    """
+    marcas, conhecidas = _vocabulario_estoque()
+    alvo = set(_sem_acento(f"{carro['marca']} {carro['modelo']}").split())
+    termos = [t for t in _sem_acento(texto).split() if len(t) > 1 and not t.replace(".", "").replace(",", "").isdigit()]
+    if not termos:
+        return False
+    modelo_citado = next((t for t in termos if t not in marcas), None)
+    if modelo_citado is not None and modelo_citado not in conhecidas:
+        return False  # modelo que a loja não tem (Renegade, Hilux, Ferrari...)
+    return all(t in alvo for t in termos if t in conhecidas)
 
 
 def buscar_carros(
@@ -302,6 +336,7 @@ def salvar_carro(dados: dict, carro_id: int | None = None) -> dict:
         if not carro_id:
             s.add(c)
         s.commit()
+        invalidar_vocabulario()
         return c.como_dict()
 
 
@@ -312,6 +347,7 @@ def excluir_carro(carro_id: int) -> bool:
             return False
         s.delete(c)
         s.commit()
+        invalidar_vocabulario()
         return True
 
 
