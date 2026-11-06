@@ -1,0 +1,54 @@
+  <details class="caso" id="caso-{{ c.id }}" {{ 'open' if not c.ok }}>
+    <summary>
+      <span class="st {{ 'ok' if c.ok else 'falhou' }}">{{ '✓ ok' if c.ok else '✗ falhou' }}</span>
+      <code>{{ c.id }}</code>{% if c.id.startswith(casos_pdf) %} <span class="chip">PDF</span>{% endif %}
+      <span>{{ c.descricao }}</span>
+      {% if c.tom %}{% set media = (c.tom | sum(attribute='nota')) / (c.tom | length) %}
+      <span class="chip" title="humanidade">{{ '%.1f' | format(media) }}★</span>{% endif %}
+    </summary>
+    <div class="caso-corpo">
+      <div>
+        <p class="sub" style="margin:0 0 8px"><b>Esperado:</b> {{ c.esperado }}</p>
+        <div class="conversa">
+          {% for t in c.turnos %}
+            <div class="bolha cliente">{{ t.cliente }}</div>
+            <div class="bolha agente">{{ t.agente }}
+              {% if t.tools or t.bloqueio_entrada or t.bloqueios_saida or t.audio %}
+              <span class="meta-t">
+                {% for tool in t.tools %}<span class="chip">{{ tool }}</span> {% endfor %}
+                {% if t.audio %}<span class="chip">resposta em áudio</span>{% endif %}
+                {% if t.bloqueio_entrada %}<span class="chip">guardrail de entrada: {{ t.bloqueio_entrada }}</span>{% endif %}
+                {% for b in t.bloqueios_saida %}<span class="chip">guardrail de saída barrou: {{ b }}</span> {% endfor %}
+              </span>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <h2>Verificações</h2>
+          <ul class="checks">
+            {% for ch in c.checks %}
+              <li class="{{ '' if ch.ok else 'nok' }}">{{ '✓' if ch.ok else '✗' }} {{ ch.nome }}{% if not ch.ok and ch.detalhe %} <span class="sub">({{ ch.detalhe }})</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% if c.ficha %}
+        <div>
+          <h2>Ficha final</h2>
+          <dl class="ficha">
+            {% for k, v in c.ficha.items() %}<dt>{{ k.replace('_', ' ') }}</dt><dd>{{ v | join(', ') if v is iterable and v is not string else v }}</dd>{% endfor %}
+          </dl>
+        </div>
+        {% endif %}
+        {% if c.transferencia %}
+        <div>
+          <h2>Resumo para o vendedor</h2>
+          <p class="sub" style="margin:0 0 4px">{{ c.transferencia.motivo.replace('_', ' ') }} · urgência {{ c.transferencia.urgencia }}</p>
+          <p class="resumo" style="margin:0">{{ c.transferencia.resumo }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </details>
