@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block titulo %}Chat · {{ loja }}{% endblock %}
+{% block head %}
+<style>
+  /* Janela de conversa com altura fixa e rolagem própria; a caixa de mensagem fica sempre visível */
+  .janela { display: flex; flex-direction: column; gap: 10px; padding: 0; overflow: hidden;
+            height: clamp(320px, calc(100vh - 330px), 640px); }
+  .rolagem { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
+  .janela .aviso { margin: 0 16px 12px; }
+  .compositor { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+  .campo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+           border-radius: 999px; padding: 4px 6px 4px 14px; background: var(--bg); }
+  .campo input[type=text] { flex: 1; min-width: 0; border: 0; background: transparent; padding: 6px 0; outline: none; }
+  .icone { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+           border-radius: 50%; border: 0; background: transparent; color: var(--muted); cursor: pointer; flex: none; }
+  .icone:hover, .icone:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
+  .acao { width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--accent); color: var(--surface);
+          display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+  .acao:disabled { opacity: .5; cursor: default; }
+  .acao:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .acao svg, .icone svg { width: 22px; height: 22px; }
+  .gravando { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 1px solid var(--stop);
+              background: var(--stop-soft); border-radius: 999px; padding: 8px 14px; color: var(--fg); }
+  .ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--stop); flex: none;
+           animation: pulsar 1s ease-in-out infinite; }
+  @keyframes pulsar { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.75); } }
+  @media (prefers-reduced-motion: reduce) { .ponto { animation: none; } }
+  .tempo { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .ondas { display: flex; align-items: center; gap: 3px; height: 18px; flex: 1; min-width: 0; overflow: hidden; }
+  .ondas i { display: block; width: 3px; border-radius: 2px; background: var(--stop); opacity: .7; }
+  .status-mic { font-size: 12px; color: var(--stop); margin: 0 12px 10px; }
+</style>
+{% endblock %}
+{% block conteudo %}
+<div class="linha" style="justify-content:space-between">
+  <div>
+    <h1>Chat do cliente</h1>
+    <p class="sub">Simula o WhatsApp. Aqui não precisa de <code>#thread</code>. Para recomeçar, use "Nova conversa". Conversa: <code id="cid"></code></p>
+  </div>
+  <button class="btn sec" id="nova">Nova conversa</button>
+</div>
+
+<div class="card janela">
+  <div class="conversa rolagem" id="conversa" aria-live="polite"></div>
+  <div id="aviso" class="aviso" hidden>Você foi transferido para um vendedor. Ele vai continuar a conversa por aqui.</div>
+</div>
+
+<form class="card" id="form" style="padding:0">
+  <div class="compositor">
+    <!-- Estado normal: campo de texto (com clipe para imagem) -->
+    <div class="campo" id="campo">
+      <input type="text" id="texto" name="texto" placeholder="Mensagem" autocomplete="off" aria-label="Mensagem">
+      <label class="icone" for="imagem" title="Enviar imagem" aria-label="Enviar imagem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+      </label>
+      <input id="imagem" type="file" accept="image/*" hidden>
+    </div>
+    <!-- Estado gravando: indicador no lugar do campo -->
+    <div class="gravando" id="gravando" hidden role="status" aria-live="polite">
+      <span class="ponto" aria-hidden="true"></span>
+      <span>Gravando</span>
+      <span class="tempo" id="tempo">0:00</span>
+      <span class="ondas" id="ondas" aria-hidden="true"></span>
+      <button type="button" class="icone" id="cancelar" title="Cancelar áudio" aria-label="Cancelar áudio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+      </button>
+    </div>
+    <!-- Um botão só: microfone (campo vazio) · enviar (com texto ou gravando) -->
+    <button type="button" class="acao" id="acao" aria-label="Gravar áudio" title="Gravar áudio">
+      <svg id="ic-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+      <svg id="ic-enviar" viewBox="0 0 24 24" fill="currentColor" hidden><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+    </button>
+  </div>
+  <p class="status-mic" id="status-mic" hidden></p>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+let clienteId = null;
+try { clienteId = localStorage.getItem("autoconf_cliente"); } catch (e) {}
+if (!clienteId) novoCliente();
+$("cid").textContent = clienteId;
+
+function novoCliente() {
+  clienteId = "web-" + Math.random().toString(36).slice(2, 8);
+  try { localStorage.setItem("autoconf_cliente", clienteId); } catch (e) {}
+}
+
+function bolha(papel, texto, audioUrl, meta) {
+  const d = document.createElement("div");
+  d.className = "bolha " + papel;
+  if (texto) d.append(document.createTextNode(texto));
+  if (audioUrl) { const a = document.createElement("audio"); a.controls = true; a.src = audioUrl; d.append(a); }
+  if (meta) { const m = document.createElement("span"); m.className = "meta"; m.textContent = meta; d.append(m); }
+  $("conversa").append(d);
+  rolarParaOFim();
+  return d;
+}
+
+// Rola só a caixa da conversa (a página não se mexe)
+function rolarParaOFim() {
+  const c = $("conversa");
+  c.scrollTop = c.scrollHeight;
+}
+
+async function carregar() {
+  $("conversa").innerHTML = "";
+  const r = await fetch(`/chat/${clienteId}/historico`);
+  const j = await r.json();
+  for (const m of j.mensagens) bolha(m.papel, m.texto, m.audio_url);
+  $("aviso").hidden = j.status_lead !== "humano";
+  $("conversa").style.scrollBehavior = "auto";  // ao abrir, vai direto para a última mensagem
+  rolarParaOFim();
+  $("conversa").style.scrollBehavior = "";
+}
+
+async function enviar(fd, rotulo) {
+  fd.append("cliente_id", clienteId);
+  const minha = rotulo instanceof HTMLElement ? rotulo : bolha("cliente", rotulo);
+  if (rotulo instanceof HTMLElement) rotulo = "";
+  const esperando = bolha("agente", "digitando…");
+  $("acao").disabled = true;
+  try {
+    const r = await fetch("/chat", { method: "POST", body: fd });
+    const j = await r.json();
+    esperando.remove();
+    if (j.texto_cliente && j.texto_cliente !== rotulo) {
+      const m = document.createElement("span"); m.className = "meta"; m.textContent = "entendido como: " + j.texto_cliente; minha.append(m);
+    }
+    if (j.audio_url) bolha("agente", "", j.audio_url);
+    // um balão de cada vez, com "digitando…" entre eles (como uma pessoa no WhatsApp)
+    const textos = j.textos || [];
+    for (let i = 0; i < textos.length; i++) {
+      if (i > 0) {
+        const dig = bolha("agente", "digitando…");
+        await new Promise((ok) => setTimeout(ok, Math.min(1600, 400 + textos[i].length * 12)));
+        dig.remove();
+      }
+      bolha("agente", textos[i]);
+    }
+    if (j.ignorado === "com_humano") bolha("agente", "", null, "mensagem registrada para o vendedor");
+    $("aviso").hidden = j.status_lead !== "humano";
+    rolarParaOFim();
+  } catch (e) {
+    esperando.textContent = "Não consegui enviar. Confira se o servidor está rodando.";
+  } finally {
+    $("acao").disabled = false;
+  }
+}
+
+// ---------- Botão único: microfone ou enviar ----------
+function atualizarBotao() {
+  const gravandoAgora = gravador && gravador.state === "recording";
+  const temTexto = $("texto").value.trim().length > 0;
+  const modoEnviar = gravandoAgora || temTexto;
+  // SVG não tem a propriedade .hidden: usa o atributo
+  $("ic-mic").toggleAttribute("hidden", modoEnviar);
+  $("ic-enviar").toggleAttribute("hidden", !modoEnviar);
+  const rotulo = gravandoAgora ? "Enviar áudio" : temTexto ? "Enviar mensagem" : "Gravar áudio";
+  $("acao").setAttribute("aria-label", rotulo);
+  $("acao").title = rotulo;
+}
+
+function enviarTexto() {
+  const texto = $("texto").value.trim();
+  if (!texto) return;
+  const fd = new FormData(); fd.append("texto", texto);
+  $("texto").value = "";
+  atualizarBotao();
+  enviar(fd, texto);
+}
+
+$("texto").addEventListener("input", atualizarBotao);
+$("form").addEventListener("submit", (ev) => { ev.preventDefault(); enviarTexto(); });
+$("acao").addEventListener("click", () => {
+  if (gravador && gravador.state === "recording") return pararGravacao(true);
+  if ($("texto").value.trim()) return enviarTexto();
+  iniciarGravacao();
+});
+
+$("imagem").addEventListener("change", () => {
+  const f = $("imagem").files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append("arquivo", f);
+  fd.append("texto", $("texto").value.trim());
+  $("texto").value = "";
+  enviar(fd, "[imagem] " + f.name);
+  $("imagem").value = "";
+});
+
+// ---------- Gravação de áudio com indicador ----------
+let gravador = null, partes = [], stream = null, relogio = null, inicio = 0, enviarAoParar = false;
+let audioCtx = null, analisador = null, quadro = null;
+
+function mostrarGravando(sim) {
+  $("campo").hidden = sim;
+  $("gravando").hidden = !sim;
+  atualizarBotao();
+}
+
+function desenharOndas() {
+  if (!analisador) return;
+  const dados = new Uint8Array(analisador.fftSize);
+  analisador.getByteTimeDomainData(dados);
+  let soma = 0;
+  for (const v of dados) soma += ((v - 128) / 128) ** 2;
+  const nivel = Math.min(1, Math.sqrt(soma / dados.length) * 4);  // volume real do microfone
+  const barra = document.createElement("i");
+  barra.style.height = Math.max(3, Math.round(nivel * 18)) + "px";
+  const ondas = $("ondas");
+  ondas.append(barra);
+  while (ondas.children.length > 60) ondas.firstChild.remove();
+  quadro = setTimeout(desenharOndas, 90);
+}
+
+async function iniciarGravacao() {
+  $("status-mic").hidden = true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    $("status-mic").textContent = "Não consegui acessar o microfone. Libere a permissão no navegador e tente de novo.";
+    $("status-mic").hidden = false;
+    return;
+  }
+  gravador = new MediaRecorder(stream);
+  partes = [];
+  gravador.ondataavailable = (e) => { if (e.data.size) partes.push(e.data); };
+  gravador.onstop = finalizarGravacao;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analisador = audioCtx.createAnalyser();
+    analisador.fftSize = 512;
+    audioCtx.createMediaStreamSource(stream).connect(analisador);
+  } catch (e) { analisador = null; }
+  $("ondas").innerHTML = "";
+  inicio = Date.now();
+  $("tempo").textContent = "0:00";
+  relogio = setInterval(() => {
+    const s = Math.floor((Date.now() - inicio) / 1000);
+    $("tempo").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }, 250);
+  gravador.start();
+  mostrarGravando(true);
+  desenharOndas();
+}
+
+function pararGravacao(enviarDepois) {
+  enviarAoParar = enviarDepois;
+  if (gravador && gravador.state === "recording") gravador.stop();
+}
+
+function finalizarGravacao() {
+  clearInterval(relogio);
+  clearTimeout(quadro);
+  stream && stream.getTracks().forEach((t) => t.stop());
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; analisador = null; }
+  const duracao = $("tempo").textContent;
+  const tipo = gravador.mimeType || "audio/webm";
+  gravador = null;
+  mostrarGravando(false);
+  if (!enviarAoParar || !partes.length) return;
+  const blob = new Blob(partes, { type: tipo });
+  // bolha do cliente com o próprio áudio, para ouvir o que foi enviado
+  const minha = bolha("cliente", "", URL.createObjectURL(blob), `áudio · ${duracao}`);
+  const fd = new FormData(); fd.append("arquivo", blob, "audio.webm");
+  enviar(fd, minha);
+}
+
+$("cancelar").addEventListener("click", () => pararGravacao(false));
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && gravador && gravador.state === "recording") pararGravacao(false);
+});
+
+$("nova").addEventListener("click", () => { novoCliente(); $("cid").textContent = clienteId; carregar(); });
+atualizarBotao();
+carregar();
+</script>
+{% endblock %}
