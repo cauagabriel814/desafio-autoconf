@@ -2,17 +2,41 @@
 {% block titulo %}Config · {{ loja }}{% endblock %}
 {% block head %}
 <style>
-  .form-config { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-  .form-config label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  .form-config label b { color: var(--fg); font-size: 13px; font-weight: 500; }
-  .form-config input, .form-config select { width: 100%; height: 38px; }
-  .form-config .ajuda { font-size: 11px; }
-  .form-config .mudou { color: var(--accent); }
-  .modos { display: grid; gap: 6px; }
-  .modos label { flex-direction: row; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--line);
-                 border-radius: 6px; cursor: pointer; color: var(--fg); font-size: 13px; }
+  /* Seções por assunto, cada uma num cartão; interruptores no lugar de on/off; barra de salvar fixa no rodapé */
+  .secao { display: flex; flex-direction: column; gap: 14px; }
+  .secao > header { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .secao > header h2 { margin: 0; }
+  .campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .campo > label { font-weight: 500; font-size: 13px; }
+  .campo input, .campo select { width: 100%; height: 38px; }
+  .ajuda { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .editado { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 400;
+             color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); }
+  .interruptor { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px;
+                 border: 1px solid var(--line); border-radius: 8px; grid-column: 1 / -1; }
+  .interruptor .texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .interruptor .texto b { font-size: 13px; font-weight: 500; }
+  .chave { position: relative; flex: none; width: 46px; height: 26px; }
+  .chave input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  .chave .trilho { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; }
+  .chave .trilho::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+                          background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .35); transition: transform .15s; }
+  .chave input:checked + .trilho { background: var(--accent); }
+  .chave input:checked + .trilho::after { transform: translateX(20px); }
+  .chave input:focus-visible + .trilho { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .chave .trilho, .chave .trilho::after { transition: none; } }
+  .modos { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+  .modos label { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border: 1px solid var(--line);
+                 border-radius: 8px; cursor: pointer; color: var(--fg); font-size: 13px; }
   .modos label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  .modos input { width: auto; height: auto; margin-top: 2px; }
+  .modos input { width: auto; height: auto; margin-top: 3px; accent-color: var(--accent); }
+  .modos .desc { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .depende.apagado { opacity: .45; }
+  .barra-salvar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+                  padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+                  box-shadow: 0 4px 18px rgba(0, 0, 0, .25); }
+  .barra-salvar .sub { margin-left: auto; }
   table.consulta td:first-child { color: var(--muted); width: 40%; }
   .ok { color: var(--accent); font-weight: 500; }
   .falta { color: var(--stop); font-weight: 500; }
@@ -21,27 +45,19 @@
 {% endblock %}
 {% block conteudo %}
 {% set ed = {} %}{% for e in cfg.editaveis %}{% set _ = ed.update({e.chave: e}) %}{% endfor %}
-<div>
-  <h1>Configuração do agente</h1>
-  <p class="sub">O que você mudar aqui vale na hora, sem reiniciar, e fica salvo por cima do <code>.env</code>.
-    Modelos, endereços e chaves ficam só para consulta (mudam no <code>.env</code>). Também pela API:
-    <code>GET /config</code> · <code>PUT /config</code> · <code>POST /config/restaurar</code>.</p>
-</div>
 
-<form class="card" id="form">
-  <h2>Quando responder em áudio ou em texto</h2>
-  <div class="modos">
-    {% for modo, desc in cfg.modos_resposta.items() %}
-    <label><input type="radio" name="modo_resposta" value="{{ modo }}" {{ 'checked' if ed.modo_resposta.valor == modo }}>
-      <span><b>{{ {'espelhar': 'Espelhar o cliente', 'sempre_texto': 'Sempre texto', 'sempre_audio': 'Sempre áudio', 'texto_e_audio': 'Áudio + texto'}[modo] }}</b>
-        {% if modo == ed.modo_resposta.padrao %}<span class="sub">(padrão)</span>{% endif %}<br>{{ desc }}</span></label>
-    {% endfor %}
-  </div>
+{% macro editado(e) %}{% if e.valor != e.padrao %}<span class="editado" title="Valor no .env: {{ e.padrao }}">editado</span>{% endif %}{% endmacro %}
 
-  <h2 style="margin-top:18px">Agente</h2>
-  <div class="form-config">
-    {% for e in cfg.editaveis if e.chave != 'modo_resposta' %}
-    <label for="{{ e.chave }}"><b>{{ e.rotulo }}</b>
+{% macro campo(e) %}
+  {% if e.opcoes and e.opcoes == ['on', 'off'] %}
+    <div class="interruptor">
+      <span class="texto"><b id="r_{{ e.chave }}">{{ e.rotulo }} {{ editado(e) }}</b><span class="ajuda">{{ e.ajuda }}</span></span>
+      <span class="chave"><input type="checkbox" role="switch" data-chave="{{ e.chave }}" aria-labelledby="r_{{ e.chave }}"
+             {{ 'checked' if e.valor == 'on' }}><span class="trilho" aria-hidden="true"></span></span>
+    </div>
+  {% else %}
+    <div class="campo">
+      <label for="{{ e.chave }}">{{ e.rotulo }} {{ editado(e) }}</label>
       {% if e.opcoes %}
         <select id="{{ e.chave }}" name="{{ e.chave }}">
           {% for o in e.opcoes %}<option value="{{ o }}" {{ 'selected' if o == e.valor }}>{{ o }}</option>{% endfor %}
@@ -52,11 +68,56 @@
       {% else %}
         <input id="{{ e.chave }}" name="{{ e.chave }}" value="{{ e.valor }}" maxlength="{{ e.limites[1] }}">
       {% endif %}
-      <span class="ajuda">{{ e.ajuda }}{% if e.valor != e.padrao %} <span class="mudou">· mudado (no .env: {{ e.padrao }})</span>{% endif %}</span>
-    </label>
-    {% endfor %}
-  </div>
-  <div class="linha" style="margin-top:14px">
+      <span class="ajuda">{{ e.ajuda }}</span>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+<div>
+  <h1>Configuração do agente</h1>
+  <p class="sub">O que você mudar aqui vale na hora, sem reiniciar, e fica salvo por cima do <code>.env</code>.
+    Modelos, endereços e chaves ficam só para consulta (mudam no <code>.env</code>). Também pela API:
+    <code>GET /config</code> · <code>PUT /config</code> · <code>POST /config/restaurar</code>.</p>
+</div>
+
+<form id="form" style="display:flex; flex-direction:column; gap:18px">
+  <section class="card secao">
+    <header><h2>Respostas</h2><p class="sub">Quando o agente responde em áudio ou em texto, e com qual voz.</p></header>
+    <div class="modos">
+      {% for modo, desc in cfg.modos_resposta.items() %}
+      <label><input type="radio" name="modo_resposta" value="{{ modo }}" {{ 'checked' if ed.modo_resposta.valor == modo }}>
+        <span><b>{{ {'espelhar': 'Espelhar o cliente', 'sempre_texto': 'Sempre texto', 'sempre_audio': 'Sempre áudio', 'texto_e_audio': 'Áudio + texto'}[modo] }}</b>
+          {% if modo == ed.modo_resposta.padrao %}<span class="sub">(padrão)</span>{% endif %}<span class="desc">{{ desc }}</span></span></label>
+      {% endfor %}
+    </div>
+    <div class="campos">{{ campo(ed.openai_tts_voice) }}</div>
+  </section>
+
+  <section class="card secao">
+    <header><h2>Identidade</h2><p class="sub">Como o agente se apresenta nas mensagens.</p></header>
+    <div class="campos">{{ campo(ed.nome_atendente) }}{{ campo(ed.nome_loja) }}</div>
+  </section>
+
+  <section class="card secao">
+    <header><h2>WhatsApp</h2><p class="sub">Quando o bot responde e por quanto tempo a conversa continua sem a palavra-chave.</p></header>
+    <div class="campos">
+      {{ campo(ed.trigger_keyword) }}{{ campo(ed.sessao_minutos) }}{{ campo(ed.agrupar_segundos) }}
+      {{ campo(ed.aceitar_proprio_numero) }}
+    </div>
+  </section>
+
+  <section class="card secao">
+    <header><h2>Testes</h2><p class="sub">Comandos para recomeçar ou pausar a conversa nos seus testes (só no WhatsApp, nunca no chat).</p></header>
+    <div class="campos">{{ campo(ed.test) }}</div>
+    <div class="campos depende" id="comandos">{{ campo(ed.reset_keyword) }}{{ campo(ed.stop_keyword) }}</div>
+  </section>
+
+  <section class="card secao">
+    <header><h2>Memória</h2><p class="sub">Quanto da conversa o agente lê antes de responder.</p></header>
+    <div class="campos">{{ campo(ed.historico_n) }}</div>
+  </section>
+
+  <div class="barra-salvar">
     <button class="btn">Salvar</button>
     <button type="button" class="btn sec" id="restaurar">Voltar ao .env</button>
     <span class="sub" id="msg" role="status"></span>
@@ -94,11 +155,20 @@ const msg = document.getElementById("msg");
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const dados = Object.fromEntries(new FormData(form).entries());
+  form.querySelectorAll("input[data-chave]").forEach((c) => { dados[c.dataset.chave] = c.checked ? "on" : "off"; });
   const r = await fetch("/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
   const j = await r.json();
   if (r.ok) { msg.className = "sub ok"; msg.textContent = "Salvo. Já está valendo."; setTimeout(() => location.reload(), 700); }
   else { msg.className = "sub erro"; msg.textContent = j.detail || "Não consegui salvar."; }
 });
+
+// Os comandos de teste só valem com o modo de teste ligado: deixa isso claro na tela
+const chaveTeste = document.querySelector('input[data-chave="test"]');
+const comandos = document.getElementById("comandos");
+function marcarComandos() { comandos.classList.toggle("apagado", !chaveTeste.checked); }
+chaveTeste.addEventListener("change", marcarComandos);
+marcarComandos();
+
 document.getElementById("restaurar").addEventListener("click", async () => {
   await fetch("/config/restaurar", { method: "POST" });
   location.reload();
