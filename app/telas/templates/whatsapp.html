@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titulo %}WhatsApp · {{ loja }}{% endblock %}
+{% block conteudo %}
+<div>
+  <h1>Conectar o WhatsApp</h1>
+  <p class="sub">Instância <code>{{ instancia }}</code> na Evolution API. Estado: <b>{{ estado }}</b></p>
+</div>
+
+{% if estado == 'open' %}
+<div class="card">
+  <h2>Conectado</h2>
+  <p>Mande uma mensagem para este número começando com <code>{{ gatilho }}</code> para falar com a {{ atendente }}.
+     Depois do primeiro <code>{{ gatilho }}</code>, áudios e imagens passam por 30 minutos sem a palavra-chave.</p>
+</div>
+{% elif qr %}
+<div class="card linha" style="align-items:flex-start;gap:24px">
+  <img src="{{ qr }}" alt="QR code para conectar o WhatsApp" style="width:260px;height:260px;background:#fff;padding:8px;border-radius:8px">
+  <ol>
+    <li>Abra o WhatsApp no celular.</li>
+    <li>Toque em <b>Aparelhos conectados</b> → <b>Conectar um aparelho</b>.</li>
+    <li>Aponte a câmera para o QR code.</li>
+    <li>Recarregue esta página para ver o estado.</li>
+  </ol>
+</div>
+{% else %}
+<div class="aviso">Não consegui falar com a Evolution API. Confira se o container <code>evolution</code> está rodando
+  (<code>docker compose ps</code>) e se <code>EVOLUTION_API_KEY</code> está no <code>.env</code>. Depois recarregue a página.</div>
+{% endif %}
+{% endblock %}

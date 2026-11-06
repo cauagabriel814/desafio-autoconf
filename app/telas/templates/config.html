@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block titulo %}Config · {{ loja }}{% endblock %}
+{% block head %}
+<style>
+  .form-config { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .form-config label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .form-config label b { color: var(--fg); font-size: 13px; font-weight: 500; }
+  .form-config input, .form-config select { width: 100%; height: 38px; }
+  .form-config .ajuda { font-size: 11px; }
+  .form-config .mudou { color: var(--accent); }
+  .modos { display: grid; gap: 6px; }
+  .modos label { flex-direction: row; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--line);
+                 border-radius: 6px; cursor: pointer; color: var(--fg); font-size: 13px; }
+  .modos label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .modos input { width: auto; height: auto; margin-top: 2px; }
+  table.consulta td:first-child { color: var(--muted); width: 40%; }
+  .ok { color: var(--accent); font-weight: 500; }
+  .falta { color: var(--stop); font-weight: 500; }
+  #msg.ok { color: var(--accent); } #msg.erro { color: var(--stop); }
+</style>
+{% endblock %}
+{% block conteudo %}
+{% set ed = {} %}{% for e in cfg.editaveis %}{% set _ = ed.update({e.chave: e}) %}{% endfor %}
+<div>
+  <h1>Configuração do agente</h1>
+  <p class="sub">O que você mudar aqui vale na hora, sem reiniciar, e fica salvo por cima do <code>.env</code>.
+    Modelos, endereços e chaves ficam só para consulta (mudam no <code>.env</code>). Também pela API:
+    <code>GET /config</code> · <code>PUT /config</code> · <code>POST /config/restaurar</code>.</p>
+</div>
+
+<form class="card" id="form">
+  <h2>Quando responder em áudio ou em texto</h2>
+  <div class="modos">
+    {% for modo, desc in cfg.modos_resposta.items() %}
+    <label><input type="radio" name="modo_resposta" value="{{ modo }}" {{ 'checked' if ed.modo_resposta.valor == modo }}>
+      <span><b>{{ {'espelhar': 'Espelhar o cliente', 'sempre_texto': 'Sempre texto', 'sempre_audio': 'Sempre áudio', 'texto_e_audio': 'Áudio + texto'}[modo] }}</b>
+        {% if modo == ed.modo_resposta.padrao %}<span class="sub">(padrão)</span>{% endif %}<br>{{ desc }}</span></label>
+    {% endfor %}
+  </div>
+
+  <h2 style="margin-top:18px">Agente</h2>
+  <div class="form-config">
+    {% for e in cfg.editaveis if e.chave != 'modo_resposta' %}
+    <label for="{{ e.chave }}"><b>{{ e.rotulo }}</b>
+      {% if e.opcoes %}
+        <select id="{{ e.chave }}" name="{{ e.chave }}">
+          {% for o in e.opcoes %}<option value="{{ o }}" {{ 'selected' if o == e.valor }}>{{ o }}</option>{% endfor %}
+        </select>
+      {% elif e.tipo in ('inteiro', 'numero') %}
+        <input id="{{ e.chave }}" name="{{ e.chave }}" type="number" value="{{ e.valor }}" min="{{ e.limites[0] }}"
+               max="{{ e.limites[1] }}" step="{{ '1' if e.tipo == 'inteiro' else '0.5' }}">
+      {% else %}
+        <input id="{{ e.chave }}" name="{{ e.chave }}" value="{{ e.valor }}" maxlength="{{ e.limites[1] }}">
+      {% endif %}
+      <span class="ajuda">{{ e.ajuda }}{% if e.valor != e.padrao %} <span class="mudou">· mudado (no .env: {{ e.padrao }})</span>{% endif %}</span>
+    </label>
+    {% endfor %}
+  </div>
+  <div class="linha" style="margin-top:14px">
+    <button class="btn">Salvar</button>
+    <button type="button" class="btn sec" id="restaurar">Voltar ao .env</button>
+    <span class="sub" id="msg" role="status"></span>
+  </div>
+</form>
+
+<div class="grid2">
+  <div class="card tabela-wrap">
+    <h2>Modelos e serviços (só consulta)</h2>
+    <table class="consulta">
+      <tbody>
+        {% for c in cfg.so_consulta %}<tr><td>{{ c.rotulo }}</td><td><code>{{ c.valor }}</code></td></tr>{% endfor %}
+        {% for nome, ok in cfg.chaves.items() %}
+          <tr><td>{{ nome }}</td><td class="{{ 'ok' if ok else 'falta' }}">{{ 'configurada' if ok else 'não configurada' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card tabela-wrap">
+    <h2>Bibliotecas (só consulta)</h2>
+    <table class="consulta">
+      <tbody>
+        <tr><td>Python</td><td><code>{{ cfg.python }}</code></td></tr>
+        {% for b in cfg.bibliotecas %}<tr><td>{{ b.nome }}</td><td><code>{{ b.versao }}</code></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById("form");
+const msg = document.getElementById("msg");
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const dados = Object.fromEntries(new FormData(form).entries());
+  const r = await fetch("/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados) });
+  const j = await r.json();
+  if (r.ok) { msg.className = "sub ok"; msg.textContent = "Salvo. Já está valendo."; setTimeout(() => location.reload(), 700); }
+  else { msg.className = "sub erro"; msg.textContent = j.detail || "Não consegui salvar."; }
+});
+document.getElementById("restaurar").addEventListener("click", async () => {
+  await fetch("/config/restaurar", { method: "POST" });
+  location.reload();
+});
+</script>
+{% endblock %}

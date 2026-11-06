@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block titulo %}Testes · {{ loja }}{% endblock %}
+{% block head %}
+<style>
+  .placar { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  .placar b { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .barra { height: 8px; border-radius: 999px; background: var(--stop-soft); overflow: hidden; flex: 1 1 200px; }
+  .barra i { display: block; height: 100%; background: var(--accent); }
+  details.caso { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+  details.caso[open] { border-color: var(--accent); }
+  details.caso > summary { cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; list-style: none; }
+  details.caso > summary::-webkit-details-marker { display: none; }
+  .st { font-weight: 700; min-width: 56px; }
+  .st.ok { color: var(--accent); }
+  .st.falhou { color: var(--stop); }
+  .caso-corpo { padding: 0 14px 14px; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+  .meta-t { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  ul.checks { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  ul.checks li.nok { color: var(--stop); }
+  .chip { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+  @media (max-width: 760px) { .caso-corpo { grid-template-columns: 1fr; } }
+  .and-topo { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 14px 0 8px; }
+  .and-topo .barra { background: var(--line); }
+  .and-topo .barra i { transition: width .4s ease; }
+  .girando { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+             animation: girar .8s linear infinite; display: inline-block; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .girando { animation-duration: 3s; } }
+  ul.and-lista { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                 gap: 4px 16px; font-size: 13px; }
+  ul.and-lista li { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  ul.and-lista li code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul.and-lista li.nok { color: var(--stop); }
+  ul.and-lista li.fila { color: var(--muted); }
+  ul.and-lista li.vez { color: var(--accent); font-weight: 600; }
+  #resultados.antigo { opacity: .45; pointer-events: none; }
+</style>
+{% endblock %}
+{% block conteudo %}
+<div>
+  <h1>Testes do agente</h1>
+  <p class="sub">Conversas de teste rodadas contra o agente de verdade (usam o modelo da OpenAI). Escolha o que rodar:</p>
+</div>
+
+<div class="card rodar">
+  <div class="linha">
+    {% for chave, g in grupos.items() %}
+      <button type="button" class="btn {{ '' if loop.first else 'sec' }}" data-grupo="{{ chave }}">Rodar {{ g[0][0] | lower }}{{ g[0][1:] }}</button>
+    {% endfor %}
+  </div>
+  <p class="sub" style="margin:6px 0 0">PDF: {{ contagem.pdf }} conversas, cerca de 1 min · Coleta básica: {{ contagem.coleta }}, cerca de {{ (contagem.coleta / 6) | round | int }} min · Respostas da Autoconf: {{ contagem.autoconf }}, cerca de 1 min · Todos: {{ contagem.todos }} + nota de humanidade, cerca de {{ (contagem.todos / 4.5) | round | int }} min (substitui a rodada completa).</p>
+  <div id="andamento" hidden>
+    <div class="and-topo">
+      <span class="girando" id="and-gira" aria-hidden="true"></span>
+      <span id="and-titulo" aria-live="polite"></span>
+      <div class="barra" role="progressbar" aria-label="Andamento da rodada" id="and-barra"><i style="width:0"></i></div>
+      <span class="sub" id="and-tempo"></span>
+    </div>
+    <ul class="and-lista" id="and-casos"></ul>
+  </div>
+</div>
+
+<div id="ao-vivo" style="display:flex;flex-direction:column;gap:10px"></div>
+
+<div id="resultados">
+<div class="linha">
+  <a class="pill {{ 'on' if rodada == 'completa' }}" href="/painel/testes">Rodada completa</a>
+  {% if tem_parcial %}<a class="pill {{ 'on' if rodada == 'parcial' }}" href="?rodada=parcial">Última rodada parcial</a>{% endif %}
+</div>
+
+{% if not dados %}
+  <div class="card vazio">Nenhum resultado ainda. Rode os testes pelos botões acima.</div>
+{% else %}
+  <div class="card placar">
+    <span><b>{{ dados.passaram }}</b> de <b>{{ dados.total }}</b> casos passaram</span>
+    <div class="barra" role="img" aria-label="{{ dados.passaram }} de {{ dados.total }}"><i style="width: {{ (100 * dados.passaram / dados.total) | round(1) if dados.total else 0 }}%"></i></div>
+    <span class="sub">rodado em {{ dados.gerado_em.replace('T', ' ') }}</span>
+    {% if dados.tom_media %}
+    <span title="Juiz de humanidade: nota de 1 a 5 para cada resposta">Humanidade: <b>{{ '%.2f' | format(dados.tom_media) }}</b> de 5
+      <span class="sub">({{ dados.tom_respostas }} respostas)</span></span>
+    {% endif %}
+  </div>
+
+  <div class="linha">
+    {% set base = '?rodada=parcial&' if rodada == 'parcial' else '?' %}
+    <a class="pill {{ 'on' if not filtro }}" href="{{ base }}">Todos ({{ dados.total }})</a>
+    {% if n_pdf %}<a class="pill {{ 'on' if filtro == 'pdf' }}" href="{{ base }}filtro=pdf">Casos do PDF ({{ n_pdf }})</a>{% endif %}
+    <a class="pill {{ 'on' if filtro == 'falhas' }}" href="{{ base }}filtro=falhas">Só falhas ({{ dados.total - dados.passaram }})</a>
+  </div>
+
+  {% for c in casos %}{% include "_caso.html" %}
+  {% else %}
+    <div class="card vazio">Nenhuma falha na última rodada.</div>
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const botoes = document.querySelectorAll("[data-grupo]");
+  const caixa = document.getElementById("andamento");
+  const titulo = document.getElementById("and-titulo");
+  const lista = document.getElementById("and-casos");
+  const gira = document.getElementById("and-gira");
+  const barra = document.getElementById("and-barra");
+  const tempo = document.getElementById("and-tempo");
+  const resultados = document.getElementById("resultados");
+  let estavaRodando = false;
+
+  const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function decorrido(ini, fim) {
+    const s = Math.max(0, Math.round((new Date(fim) - new Date(ini)) / 1000));
+    return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
+  }
+
+  function mostrar(s) {
+    if (!s.grupo) return;
+    caixa.hidden = false;
+    botoes.forEach(b => b.disabled = s.rodando);
+    gira.hidden = !s.rodando;
+    resultados.hidden = s.rodando;  // enquanto roda, no lugar do resultado antigo aparecem os casos desta rodada
+    const feitos = s.casos.length, ok = s.casos.filter(c => c.ok).length, total = s.total || feitos;
+    if (s.rodando && feitos !== mostrados) carregarAoVivo(feitos);
+    barra.querySelector("i").style.width = `${total ? (100 * feitos / total) : 0}%`;
+    barra.setAttribute("aria-valuenow", feitos); barra.setAttribute("aria-valuemax", total);
+    titulo.innerHTML = s.rodando
+      ? `<b>Rodando ${esc(s.rotulo.toLowerCase())}…</b> ${feitos} de ${total} prontos`
+      : `<b>${esc(s.rotulo)}:</b> ${ok} de ${feitos} passaram`
+        + (s.codigo ? ` <span style="color:var(--stop)">(o simulador saiu com erro, veja relatorios/rodada.log)</span>` : "");
+    tempo.textContent = s.rodando ? `${decorrido(s.inicio, s.agora)} · cada caso aparece abaixo assim que termina`
+                                  : `levou ${decorrido(s.inicio, s.fim)} · terminou às ${(s.fim || "").slice(11, 16)}`;
+    lista.innerHTML =
+      s.casos.map(c => `<li class="${c.ok ? "" : "nok"}" title="${esc(c.detalhe)}">${c.ok ? "✓" : "✗"} <a href="#caso-${esc(c.id)}"><code>${esc(c.id)}</code></a></li>`).join("")
+      + (s.atual ? `<li class="vez"><span class="girando"></span> <code>${esc(s.atual)}</code></li>` : "")
+      + (s.rodando ? s.faltam.map(i => `<li class="fila">○ <code>${esc(i)}</code></li>`).join("") : "");
+    if (estavaRodando && !s.rodando) {  // acabou: abre o resultado completo
+      location.href = s.parcial ? "/painel/testes?rodada=parcial" : "/painel/testes";
+    }
+    estavaRodando = s.rodando;
+    if (s.rodando) setTimeout(atualizar, 2000);
+  }
+
+  // Busca o HTML dos casos já terminados e mantém abertos os que a pessoa abriu
+  const aoVivo = document.getElementById("ao-vivo");
+  let mostrados = -1;
+  async function carregarAoVivo(feitos) {
+    try {
+      const abertos = new Set([...aoVivo.querySelectorAll("details[open]")].map(d => d.id));
+      const html = await (await fetch("/painel/testes/ao-vivo")).text();
+      aoVivo.innerHTML = html;
+      aoVivo.querySelectorAll("details").forEach(d => { if (abertos.has(d.id)) d.open = true; });
+      mostrados = feitos;
+    } catch { /* tenta de novo na próxima atualização */ }
+  }
+
+  async function atualizar() {
+    try { mostrar(await (await fetch("/testes/status")).json()); }
+    catch { setTimeout(atualizar, 4000); }
+  }
+
+  botoes.forEach(b => b.addEventListener("click", async () => {
+    if (b.dataset.grupo === "todos" && !confirm("Rodar todos os {{ contagem.todos }} casos com o juiz de humanidade? Leva uns {{ (contagem.todos / 4.5) | round | int }} minutos e substitui a rodada completa salva.")) return;
+    const r = await fetch(`/testes/rodar/${b.dataset.grupo}`, { method: "POST" });
+    if (r.ok || r.status === 409) {
+      estavaRodando = true;
+      caixa.hidden = false; gira.hidden = false;
+      titulo.innerHTML = "<b>Começando…</b>";
+      botoes.forEach(x => x.disabled = true);
+      atualizar();
+    }
+  }));
+
+  atualizar();  // se já tinha uma rodada em andamento (ou acabou de terminar), mostra
+})();
+</script>
+{% endblock %}

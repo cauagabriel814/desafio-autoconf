@@ -1,0 +1,4 @@
+{% if casos %}
+  <h2 style="margin:4px 0 0">Resultados desta rodada <span class="sub" style="font-weight:400">({{ passaram }} de {{ casos | length }} passaram até agora)</span></h2>
+  {% for c in casos %}{% include "_caso.html" %}{% endfor %}
+{% endif %}

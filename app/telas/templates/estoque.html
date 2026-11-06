@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block titulo %}Estoque · {{ loja }}{% endblock %}
+{% block head %}
+<style>
+  /* Todos os campos com a mesma altura e o rótulo em cima: as linhas ficam alinhadas */
+  .campos-carro { --alt: 38px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                  gap: 12px; align-items: start; }
+  .campos-carro label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+  .campos-carro input:not([type=checkbox]), .campos-carro select { width: 100%; min-width: 0; height: var(--alt); }
+  .com-prefixo, .com-sufixo, .caixa-check { display: flex; align-items: center; height: var(--alt);
+                  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .com-prefixo:focus-within, .com-sufixo:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .campos-carro .com-prefixo input, .campos-carro .com-sufixo input { border: 0; outline: none; height: 100%;
+                  text-align: right; font-variant-numeric: tabular-nums; background: transparent; }
+  .com-prefixo i, .com-sufixo i { font-style: normal; color: var(--muted); padding: 0 10px; }
+  .caixa-check { gap: 8px; padding: 0 10px; color: var(--fg); font-size: 14px; cursor: pointer; }
+  .avisos { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .dica { margin: 0; font-size: 12px; color: var(--muted); }
+  .dica.ativa { color: var(--accent); font-weight: 500; }
+  .confirmar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px;
+               border: 1px solid var(--warn); background: var(--warn-soft); }
+  .confirmar span { flex: 1 1 220px; }
+  .importar { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: center; }
+  .zona { display: flex; align-items: center; gap: 14px; padding: 18px; border: 2px dashed var(--line); border-radius: 10px;
+          background: var(--bg); cursor: pointer; transition: border-color .15s, background .15s; }
+  .zona:hover, .zona:focus-within, .zona.arrastando { border-color: var(--accent); background: var(--accent-soft); }
+  .zona.escolhido { border-style: solid; border-color: var(--accent); }
+  .zona svg { width: 34px; height: 34px; color: var(--accent); flex: none; }
+  .zona-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .zona-texto span { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .importar-lado { display: flex; flex-direction: column; gap: 8px; }
+  #msg-csv.ok { color: var(--accent); }
+  #msg-csv.erro { color: var(--stop); }
+  @media (max-width: 760px) { .importar { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block conteudo %}
+<div>
+  <h1>Estoque</h1>
+  <p class="sub">O agente só oferece carros disponíveis desta lista. Mudanças valem na hora.</p>
+</div>
+
+<form class="card importar" id="form-csv">
+  <label class="zona" id="zona" for="csv">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+    <span class="zona-texto">
+      <b id="zona-titulo">Importar carros de um CSV</b>
+      <span id="zona-sub">Arraste o arquivo aqui ou clique para escolher</span>
+    </span>
+    <input type="file" id="csv" accept=".csv,text/csv" hidden>
+  </label>
+  <div class="importar-lado">
+    <p class="sub" style="margin:0">Colunas: <code>marca, modelo, ano, km, preco, tipo</code>. Os carros são <b>acrescentados</b> ao estoque.</p>
+    <div class="linha">
+      <button class="btn" id="btn-importar" disabled>Importar</button>
+      <a class="btn sec" href="/carros/modelo.csv">Baixar modelo</a>
+    </div>
+    <span class="sub" id="msg-csv" role="status"></span>
+  </div>
+</form>
+
+<form class="card" id="form">
+  <h2 id="form-titulo">Adicionar carro</h2>
+  <input type="hidden" id="carro-id">
+  <div class="campos-carro">
+    <label>Marca
+      <input id="marca" list="lista-marcas" placeholder="Escolha ou digite" required autocomplete="off">
+      <datalist id="lista-marcas"></datalist>
+    </label>
+    <label>Modelo
+      <input id="modelo" list="lista-modelos" placeholder="Escolha ou digite" required autocomplete="off">
+      <datalist id="lista-modelos"></datalist>
+    </label>
+    <label>Ano
+      <select id="ano" required></select>
+    </label>
+    <label>Km
+      <span class="com-sufixo"><input id="km" inputmode="numeric" placeholder="45.000" required autocomplete="off"><i>km</i></span>
+    </label>
+    <label>Preço
+      <span class="com-prefixo"><i>R$</i><input id="preco" inputmode="numeric" placeholder="89.900" required autocomplete="off"></span>
+    </label>
+    <label>Tipo
+      <select id="tipo"><option>SUV</option><option>Sedã</option><option>Hatch</option><option>Picape</option></select>
+    </label>
+    <label>Situação
+      <span class="caixa-check"><input type="checkbox" id="disponivel" checked> Disponível</span>
+    </label>
+  </div>
+
+  <!-- Avisos ficam fora da linha dos campos, para não desalinhar -->
+  <div class="avisos">
+    <p class="dica" id="dica-preco">No preço, digite 55 para R$ 55.000.</p>
+    <div class="confirmar" id="confirmar-km" hidden role="alertdialog" aria-labelledby="confirmar-km-texto">
+      <span id="confirmar-km-texto"></span>
+      <button type="button" class="btn" id="km-mil"></button>
+      <button type="button" class="btn sec" id="km-exato"></button>
+    </div>
+  </div>
+
+  <div class="linha" style="margin-top:12px">
+    <button class="btn">Salvar</button>
+    <button type="button" class="btn sec" id="cancelar" hidden>Cancelar</button>
+    <span class="sub" id="msg"></span>
+  </div>
+</form>
+
+<div class="card tabela-wrap">
+  <table>
+    <thead><tr><th>Marca</th><th>Modelo</th><th>Ano</th><th>Km</th><th>Preço</th><th>Tipo</th><th>Disponível</th><th></th></tr></thead>
+    <tbody>
+    {% for c in carros %}
+      <tr>
+        <td>{{ c.marca }}</td><td>{{ c.modelo }}</td><td>{{ c.ano }}</td>
+        <td>{{ '{:,}'.format(c.km).replace(',', '.') }}</td>
+        <td>R$ {{ '{:,}'.format(c.preco).replace(',', '.') }}</td>
+        <td>{{ c.tipo }}</td>
+        <td>{{ 'sim' if c.disponivel else 'vendido' }}</td>
+        <td class="linha">
+          <button class="btn sec" onclick='editar({{ c | tojson }})'>Editar</button>
+          <button class="btn perigo" onclick="excluir({{ c.id }}, '{{ c.nome }}')">Excluir</button>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="vazio">Estoque vazio. Adicione um carro ou importe um CSV.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+const CATALOGO = {{ catalogo | tojson }};
+const ANO_ATUAL = {{ ano_atual }};
+
+// ---------- Opções: marca, modelo (da marca) e ano ----------
+$("lista-marcas").innerHTML = Object.keys(CATALOGO).map((m) => `<option value="${m}">`).join("");
+
+function marcaEscolhida() {
+  const v = $("marca").value.trim().toLowerCase();
+  return Object.keys(CATALOGO).find((m) => m.toLowerCase() === v);
+}
+
+function atualizarModelos() {
+  const m = marcaEscolhida();
+  const modelos = m ? Object.keys(CATALOGO[m]) : Object.values(CATALOGO).flatMap((x) => Object.keys(x));
+  $("lista-modelos").innerHTML = [...new Set(modelos)].map((x) => `<option value="${x}">`).join("");
+}
+
+function preencherTipo() {
+  const m = marcaEscolhida();
+  const tipo = m && CATALOGO[m][$("modelo").value.trim()];
+  if (tipo) $("tipo").value = tipo;
+}
+
+$("marca").addEventListener("input", atualizarModelos);
+$("modelo").addEventListener("input", preencherTipo);
+$("modelo").addEventListener("change", preencherTipo);
+atualizarModelos();
+
+for (let a = ANO_ATUAL + 1; a >= ANO_ATUAL - 25; a--) {
+  const o = document.createElement("option"); o.value = a; o.textContent = a;
+  if (a === ANO_ATUAL - 2) o.selected = true;
+  $("ano").append(o);
+}
+
+// ---------- Números no formato brasileiro: 55000 -> 55.000 ----------
+const digitos = (s) => String(s).replace(/\D/g, "");
+const formatar = (n) => (n === "" ? "" : Number(n).toLocaleString("pt-BR"));
+
+function mascara(el) {
+  el.addEventListener("input", () => {
+    const d = digitos(el.value).slice(0, 9);
+    el.value = formatar(d);
+    if (el.id === "preco") dicaPreco();
+  });
+}
+mascara($("km"));
+mascara($("preco"));
+
+// Preço abaixo de mil é lido "em mil": 55 -> R$ 55.000
+function valorPreco() {
+  const n = Number(digitos($("preco").value) || 0);
+  return n > 0 && n < 1000 ? n * 1000 : n;
+}
+function dicaPreco() {
+  const n = Number(digitos($("preco").value) || 0);
+  const emMil = n > 0 && n < 1000;
+  $("dica-preco").textContent = emMil
+    ? `Preço: será salvo como R$ ${formatar(n * 1000)}.`
+    : "No preço, digite 55 para R$ 55.000.";
+  $("dica-preco").classList.toggle("ativa", emMil);
+}
+
+// ---------- Km: valor baixo pode ser "em mil". Não adivinha: pergunta. ----------
+let kmConfirmado = null;  // número de km já confirmado pelo usuário para o valor digitado
+
+function kmDigitado() { return Number(digitos($("km").value) || 0); }
+
+function precisaConfirmarKm() {
+  const n = kmDigitado();
+  return n > 0 && n < 1000 && kmConfirmado !== n;
+}
+
+function perguntarKm() {
+  const n = kmDigitado();
+  $("confirmar-km-texto").textContent = `Você digitou ${formatar(n)} km. Quis dizer ${formatar(n * 1000)} km?`;
+  $("km-mil").textContent = `Sim, ${formatar(n * 1000)} km`;
+  $("km-exato").textContent = `Não, é ${formatar(n)} km`;
+  $("confirmar-km").hidden = false;
+  $("km-mil").focus();
+}
+
+$("km").addEventListener("input", () => { kmConfirmado = null; $("confirmar-km").hidden = true; });
+$("km").addEventListener("blur", () => { if (precisaConfirmarKm()) perguntarKm(); });
+$("km-mil").addEventListener("click", () => {
+  const n = kmDigitado() * 1000;
+  $("km").value = formatar(n);
+  kmConfirmado = n;
+  $("confirmar-km").hidden = true;
+});
+$("km-exato").addEventListener("click", () => {
+  kmConfirmado = kmDigitado();
+  $("confirmar-km").hidden = true;
+});
+$("preco").addEventListener("blur", () => {
+  const v = valorPreco();
+  if (v) $("preco").value = formatar(v);
+  dicaPreco();
+});
+
+// ---------- Editar / salvar ----------
+function editar(c) {
+  $("carro-id").value = c.id;
+  $("marca").value = c.marca;
+  atualizarModelos();
+  $("modelo").value = c.modelo;
+  if (![...$("ano").options].some((o) => Number(o.value) === c.ano)) {
+    const o = document.createElement("option"); o.value = c.ano; o.textContent = c.ano; $("ano").append(o);
+  }
+  $("ano").value = c.ano;
+  $("km").value = formatar(c.km);
+  kmConfirmado = c.km;  // valor que já estava salvo: não pergunta de novo
+  $("confirmar-km").hidden = true;
+  $("preco").value = formatar(c.preco);
+  $("tipo").value = c.tipo;
+  $("disponivel").checked = c.disponivel;
+  $("form-titulo").textContent = "Editar " + c.nome;
+  $("cancelar").hidden = false;
+  dicaPreco();
+  $("form").scrollIntoView();
+}
+
+$("cancelar").addEventListener("click", () => location.reload());
+
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (precisaConfirmarKm()) { perguntarKm(); $("msg").textContent = "Confirme o km antes de salvar."; return; }
+  $("msg").textContent = "";
+  const id = $("carro-id").value;
+  const corpo = {
+    marca: $("marca").value.trim(),
+    modelo: $("modelo").value.trim(),
+    ano: Number($("ano").value),
+    km: Number(digitos($("km").value) || 0),
+    preco: valorPreco(),
+    tipo: $("tipo").value,
+    disponivel: $("disponivel").checked,
+  };
+  if (corpo.preco < 1000) { $("msg").textContent = "Informe o preço (ex.: 55 ou 55.000 para R$ 55.000)."; return; }
+  const r = await fetch(id ? `/carros/${id}` : "/carros", {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+  if (r.ok) location.reload();
+  else $("msg").textContent = "Não foi possível salvar. Confira os campos.";
+});
+
+const pendente = {};
+async function excluir(id, nome) {
+  const btn = event.target;
+  if (!pendente[id]) { pendente[id] = true; btn.textContent = "Confirmar exclusão"; return; }
+  await fetch(`/carros/${id}`, { method: "DELETE" });
+  location.reload();
+}
+
+// ---------- Importar CSV (clique ou arrastar e soltar) ----------
+let arquivoCsv = null;
+function escolherArquivo(f) {
+  if (!f) return;
+  if (!/\.csv$/i.test(f.name)) {
+    $("msg-csv").className = "sub erro"; $("msg-csv").textContent = "Escolha um arquivo .csv.";
+    return;
+  }
+  arquivoCsv = f;
+  $("zona").classList.add("escolhido");
+  $("zona-titulo").textContent = f.name;
+  $("zona-sub").textContent = `${(f.size / 1024).toFixed(1)} KB · clique para trocar`;
+  $("btn-importar").disabled = false;
+  $("msg-csv").textContent = "";
+}
+$("csv").addEventListener("change", () => escolherArquivo($("csv").files[0]));
+["dragenter", "dragover"].forEach((t) => $("zona").addEventListener(t, (e) => { e.preventDefault(); $("zona").classList.add("arrastando"); }));
+["dragleave", "drop"].forEach((t) => $("zona").addEventListener(t, (e) => { e.preventDefault(); $("zona").classList.remove("arrastando"); }));
+$("zona").addEventListener("drop", (e) => escolherArquivo(e.dataTransfer.files[0]));
+
+$("form-csv").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!arquivoCsv) return;
+  $("btn-importar").disabled = true;
+  $("msg-csv").className = "sub"; $("msg-csv").textContent = "Importando…";
+  const fd = new FormData(); fd.append("arquivo", arquivoCsv);
+  const r = await fetch("/carros/importar", { method: "POST", body: fd });
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) {
+    $("msg-csv").className = "sub ok"; $("msg-csv").textContent = `${j.importados} carro(s) importado(s).`;
+    setTimeout(() => location.reload(), 900);
+  } else {
+    $("msg-csv").className = "sub erro"; $("msg-csv").textContent = j.detail || "CSV inválido.";
+    $("btn-importar").disabled = false;
+  }
+});
+</script>
+{% endblock %}

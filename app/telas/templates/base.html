@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}{{ loja }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- fontes sem travar a primeira pintura da página -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Mono&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/static/estilo.css?v={{ versao_css }}">
+<style>[hidden] { display: none !important; }</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="topo"><div class="in">
+  <a class="marca" href="/">{{ loja }}</a>
+  <nav>
+    {% set atual = request.url.path %}
+    <a href="/chat" class="{{ 'on' if atual == '/chat' }}">Chat do cliente</a>
+    <a href="/painel" class="{{ 'on' if atual == '/painel' or atual.startswith('/painel/lead') }}">Leads</a>
+    <a href="/painel/exportar" class="{{ 'on' if atual == '/painel/exportar' }}">Exportar</a>
+    <a href="/painel/estoque" class="{{ 'on' if atual == '/painel/estoque' }}">Estoque</a>
+    <a href="/painel/whatsapp" class="{{ 'on' if atual == '/painel/whatsapp' }}">WhatsApp</a>
+    <a href="/painel/testes" class="{{ 'on' if atual == '/painel/testes' }}">Testes</a>
+    <a href="/painel/config" class="{{ 'on' if atual == '/painel/config' }}">Config</a>
+  </nav>
+</div></header>
+<main>
+{% block conteudo %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Exportar · {{ loja }}{% endblock %}
+{% set nomes = {'csv': 'CSV genérico', 'json': 'JSON genérico', 'hubspot': 'HubSpot', 'pipedrive': 'Pipedrive', 'salesforce': 'Salesforce'} %}
+{% block conteudo %}
+<div>
+  <h1>Exportar para CRM</h1>
+  <p class="sub"><b>{{ total }}</b> leads válidos para exportar ({{ humano }} com vendedor). Escolha o CRM e o arquivo sai no formato do importador dele.</p>
+  {% if fora %}<p class="sub">{{ fora }} ficaram de fora: conversas do simulador, arquivadas por <code>#reset</code> ou sem nenhuma informação de compra.</p>{% endif %}
+</div>
+
+<form class="card linha" action="/export" method="get">
+  <label for="formato">Formato</label>
+  <select id="formato" name="formato">
+    {% for f in formatos %}<option value="{{ f }}" {{ 'selected' if f == formato }}>{{ nomes[f] }}</option>{% endfor %}
+  </select>
+  <label for="status">Leads</label>
+  <select id="status" name="status">
+    <option value="">Todos</option>
+    <option value="humano">Só transferidos</option>
+    <option value="bot">Só com a {{ atendente }}</option>
+  </select>
+  <button class="btn">Baixar arquivo</button>
+</form>
+
+<!-- Só o formato escolhido aparece -->
+{% for crm, mapa in mapeamentos.items() %}
+<div class="card tabela-wrap mapa" data-formato="{{ crm }}" {{ '' if crm == formato else 'hidden' }}>
+  <h2>Colunas do arquivo para o {{ nomes[crm] }}</h2>
+  <p class="sub" style="margin:0 0 8px">Cada campo da nossa ficha vira a coluna que o importador do {{ nomes[crm] }} espera.</p>
+  <table>
+    <thead><tr><th>Campo nosso</th><th>Coluna no {{ nomes[crm] }}</th></tr></thead>
+    <tbody>{% for nosso, deles in mapa.items() %}<tr><td><code>{{ nosso }}</code></td><td>{{ deles }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endfor %}
+{% for f in ['csv', 'json'] %}
+<div class="card tabela-wrap mapa" data-formato="{{ f }}" {{ '' if f == formato else 'hidden' }}>
+  <h2>Colunas do {{ nomes[f] }}</h2>
+  <p class="sub" style="margin:0 0 8px">Todos os campos da ficha do lead, com os nossos nomes. Serve para qualquer outro sistema.</p>
+  <div class="linha">{% for c in campos %}<code class="pill">{{ c }}</code>{% endfor %}</div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const sel = document.getElementById("formato");
+function mostrar() {
+  document.querySelectorAll(".mapa").forEach((el) => { el.hidden = el.dataset.formato !== sel.value; });
+}
+sel.addEventListener("change", mostrar);
+mostrar();
+</script>
+{% endblock %}

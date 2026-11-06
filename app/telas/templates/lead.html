@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block titulo %}{{ lead.nome or lead.cliente_id }} · Leads{% endblock %}
+{% block head %}
+<style>
+  dl.ficha dd.nao_perguntado, dl.ficha dd.sem_resposta, dl.ficha dd.nao_soube { color: var(--muted); font-style: italic; }
+  dl.ficha dd.sem_resposta { color: var(--warn); }
+  dl.ficha dt.principal { color: var(--fg); font-weight: 500; }
+  .legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  details.conversa-completa { margin-top: 14px; }
+  details.conversa-completa > summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+  details.conversa-completa[open] > summary { margin-bottom: 10px; }
+  .resumo-caixa { display: flex; flex-direction: column; gap: 8px; }
+  .resumo-caixa .resumo { margin: 0; }
+</style>
+{% endblock %}
+{% block conteudo %}
+{% set t = lead.transferencias[-1] if lead.transferencias else None %}
+{% set resumo = t.resumo if t else lead.ficha.get('resumo_conversa') %}
+
+<div class="linha" style="justify-content:space-between">
+  <div>
+    <a href="/painel">← Leads</a>
+    <h1>{{ lead.nome or lead.cliente_id }}</h1>
+    <p class="sub">{{ lead.cliente_id }} · {{ {'whatsapp': 'WhatsApp', 'web': 'Tela de chat', 'terminal': 'Simulador'}[lead.canal] }}
+      · <span class="pill st-{{ lead.status }}">{{ {'humano': 'com vendedor', 'parado': 'parado (#parar)', 'arquivado': 'arquivado (#reset)'}.get(lead.status, 'com a ' ~ atendente) }}</span></p>
+  </div>
+  <div class="linha">
+    {% if lead.status == 'humano' %}<button class="btn sec" id="devolver">Devolver ao bot</button>{% endif %}
+    <a class="btn sec" href="/export?formato=csv&lead_id={{ lead.id }}">Exportar CSV</a>
+    <a class="btn sec" href="/export?formato=json&lead_id={{ lead.id }}">Exportar JSON</a>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Ficha do lead</h2>
+    <dl class="ficha">
+      {% for c in campos %}
+        <dt class="{{ 'principal' if loop.index <= 3 }}">{{ c.rotulo }}</dt>
+        <dd class="{{ c.situacao }}">{{ c.valor }}</dd>
+      {% endfor %}
+    </dl>
+    <div class="legenda">
+      <span>Em destaque: as 3 perguntas da qualificação</span>
+      <span><i>não perguntado</i>: fora das 3 perguntas e o cliente não falou</span>
+      <span><i>perguntado, sem resposta</i>: a {{ atendente }} perguntou e ele não respondeu</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Conversa</h2>
+    <div class="resumo-caixa">
+      {% if t %}
+        <p class="sub" style="margin:0">Passada para o vendedor · motivo <b>{{ t.motivo.replace('_', ' ') }}</b> ·
+          urgência <b>{{ t.urgencia }}</b> · {{ t.criado_em.strftime('%d/%m %H:%M') }}</p>
+      {% endif %}
+      <p class="resumo" id="resumo">{{ resumo or 'Ainda não há resumo desta conversa.' }}</p>
+      <div class="linha">
+        <button class="btn sec" id="gerar-resumo">{{ 'Atualizar resumo' if resumo else 'Gerar resumo' }}</button>
+        <span class="sub" id="msg-resumo" role="status"></span>
+      </div>
+    </div>
+
+    <details class="conversa-completa" {{ 'open' if not resumo }}>
+      <summary>Ver conversa completa ({{ lead.mensagens | length }} mensagens)</summary>
+      <div class="conversa">
+        {% for m in lead.mensagens %}
+          <div class="bolha {{ 'bloqueada' if m.status == 'bloqueada' else m.papel }}">{{ m.texto }}
+            {% if m.audio_path %}<audio controls src="/audios/{{ m.audio_path }}"></audio>{% endif %}
+            <span class="meta">{{ m.criado_em.strftime('%H:%M') }}{% if m.tipo_origem != 'texto' %} · {{ m.tipo_origem }}{% endif %}{% if m.status == 'bloqueada' %} · bloqueada pelo guardrail: {{ m.motivo_bloqueio }}{% elif m.status == 'ignorada' %} · recebida com vendedor{% endif %}</span>
+          </div>
+        {% else %}
+          <p class="vazio">Sem mensagens.</p>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const b = document.getElementById("devolver");
+if (b) b.addEventListener("click", async () => {
+  await fetch("/leads/{{ lead.id }}/devolver", { method: "POST" });
+  location.reload();
+});
+
+const g = document.getElementById("gerar-resumo");
+g.addEventListener("click", async () => {
+  g.disabled = true;
+  document.getElementById("msg-resumo").textContent = "Gerando resumo…";
+  try {
+    const r = await fetch("/leads/{{ lead.id }}/resumo", { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || "erro");
+    document.getElementById("resumo").textContent = j.resumo;
+    document.getElementById("msg-resumo").textContent = "Resumo atualizado.";
+    g.textContent = "Atualizar resumo";
+  } catch (e) {
+    document.getElementById("msg-resumo").textContent = "Não consegui gerar o resumo agora: " + e.message;
+  } finally {
+    g.disabled = false;
+  }
+});
+</script>
+{% endblock %}
