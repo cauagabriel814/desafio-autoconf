@@ -37,8 +37,12 @@ def resumo(lead_id: int):
     lead = repo.obter_lead(lead_id)
     if not lead:
         raise HTTPException(404, "Lead não encontrado")
-    situacao = "atendimento em andamento com a assistente (ainda não transferido)" if lead.status == "bot" \
-        else f"status: {lead.status}"
+    transferencias = (repo.detalhe_lead(lead_id) or {}).get("transferencias") or []
+    if transferencias:  # já foi para o vendedor: o resumo sempre diz por quê
+        situacao = transferencias[-1]["motivo"]
+    else:
+        situacao = "atendimento em andamento com a assistente (ainda não transferido)" if lead.status == "bot" \
+            else f"status: {lead.status}"
     try:
         texto = gerar_resumo(lead_id, situacao)
     except llm.SemChaveOpenAI as e:
