@@ -11,7 +11,7 @@ from app import llm
 
 Urgencia = Literal["baixa", "media", "alta"]
 Motivo = Literal["reclamacao", "negociacao", "pedido_credito", "urgencia", "pediu_humano", "sem_resposta",
-                 "qualificado"]
+                 "qualificado", "sem_dados", "agressivo"]
 
 
 def _texto_conversa(lead_id: int) -> str:

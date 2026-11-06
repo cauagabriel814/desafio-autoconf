@@ -181,6 +181,22 @@ def processar(msgs: list[MensagemEntrada]) -> Resultado:
     return res
 
 
+def _passar_agressivo(lead_id: int, tipo_origem: str, cb: list, res: Resultado) -> Resultado:
+    """Segunda ofensa da conversa: em vez de insistir, passa para um vendedor (a assistente já pediu calma uma vez)."""
+    from app.agente.ficha import MOTIVO_PARA_VENDEDOR
+    from app.agente.tools import gerar_resumo
+
+    try:
+        resumo = gerar_resumo(lead_id, "agressivo", cb)
+    except Exception:
+        log.exception("Falha ao gerar resumo da transferência por ofensa")
+        resumo = f"Motivo da transferência: {MOTIVO_PARA_VENDEDOR['agressivo']}"
+    repo.registrar_transferencia(lead_id, "agressivo", "media", resumo)
+    res.bloqueio_entrada = "ofensivo"
+    res.transferido = True
+    return _entregar(lead_id, prompts.fixa("agressivo"), tipo_origem, cb, res)
+
+
 def _processar(msgs: list[MensagemEntrada], lead, res: Resultado, cb: list, rastreio) -> Resultado:
     primeira = msgs[0]
     try:
@@ -215,6 +231,11 @@ def _processar(msgs: list[MensagemEntrada], lead, res: Resultado, cb: list, rast
             if tipo_origem == "audio" and classe.categoria == "fora_do_assunto" and len(texto.split()) <= 5:
                 res.bloqueio_entrada = "audio_incerto"
                 return _entregar(lead.id, prompts.fixa("audio_incerto"), tipo_origem, cb, res)
+            if classe.categoria == "ofensivo":
+                ofensas = int((repo.obter_lead(lead.id).ficha or {}).get("ofensas") or 0) + 1
+                repo.atualizar_ficha(lead.id, {"ofensas": ofensas})
+                if ofensas >= 2:
+                    return _passar_agressivo(lead.id, tipo_origem, cb, res)
             res.bloqueio_entrada = classe.categoria
             return _entregar(lead.id, prompts.fixa(classe.categoria), tipo_origem, cb, res)
 
