@@ -376,3 +376,36 @@ def test_descricao_da_foto_nao_conta_como_pedido_de_lista():
     foto = "[Cliente enviou uma imagem: A imagem mostra um carro Chevrolet, em uma revenda de veículos.]"
     assert _PEDIU_LISTA.search(foto)  # "mostra" casaria com "me mostra os carros"...
     assert not _PEDIU_LISTA.search(re.sub(r"\[Cliente enviou[^\]]*\]", " ", foto))  # ...mas a descrição é removida antes
+
+
+def test_nome_do_anuncio_com_palavras_extras_ainda_acha_o_carro():
+    from app.db import repo
+
+    carros = {c["nome"]: c for c in repo.buscar_carros()}
+    onix = carros["Chevrolet Onix LT"]
+    plus = carros["Chevrolet Onix Plus Premier"]
+    # "1.0", "Turbo" e o ano não atrapalham; o "LT" aponta o carro certo
+    assert repo.combina_texto("Chevrolet Onix LT 1.0 Turbo 2022", onix)
+    assert not repo.combina_texto("Chevrolet Onix LT 1.0 Turbo 2022", plus)
+    # modelo que a loja não tem continua não casando com outro da mesma marca
+    assert not repo.combina_texto("Jeep Renegade", carros["Jeep Compass Longitude"])
+    assert not repo.combina_texto("Toyota Hilux", carros["Toyota Corolla XEi"])
+    assert not repo.combina_texto("Ferrari", onix)
+    # marca sozinha, modelo parcial e nome completo
+    assert repo.combina_texto("Chevrolet", onix) and repo.combina_texto("onix", plus)
+    assert repo.combina_texto("Corolla", carros["Toyota Corolla XEi"])
+    assert repo.combina_texto("Corolla Cross", carros["Toyota Corolla Cross XRE"])
+    assert not repo.combina_texto("Corolla Cross", carros["Toyota Corolla XEi"])
+    assert repo.combina_texto("VW T-Cross Comfortline 2023", carros["VW T-Cross Comfortline"])
+
+
+def test_carro_novo_no_estoque_entra_na_hora_no_reconhecimento_de_modelo():
+    from app.db import repo
+
+    novo = repo.salvar_carro({"marca": "Peugeot", "modelo": "208 Griffe", "ano": 2023, "km": 9000, "preco": 99000,
+                              "tipo": "Hatch"})
+    try:
+        assert repo.combina_texto("Peugeot 208", novo)  # sem esperar o guardado expirar
+    finally:
+        repo.excluir_carro(novo["id"])
+    assert not any(c["marca"] == "Peugeot" for c in repo.buscar_carros())
