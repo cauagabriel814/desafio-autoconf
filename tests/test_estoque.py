@@ -6,7 +6,7 @@ def nomes(carros):
 
 
 def test_estoque_completo():
-    assert len(repo.buscar_carros()) == 20
+    assert len(repo.buscar_carros()) == 22
 
 
 def test_suv_ate_120_mil():

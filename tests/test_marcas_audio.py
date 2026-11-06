@@ -47,8 +47,8 @@ def test_marca_sozinha_no_estoque_mostra_os_carros_dela():
 
 
 def test_marca_fora_do_estoque_avisa():
-    s = sugestoes({"tipo_interesse": "Hatch"}, ["BYD"])
-    assert "BYD, que NÃO está no estoque" in s
+    s = sugestoes({"tipo_interesse": "Hatch"}, ["Tesla"])
+    assert "Tesla, que NÃO está no estoque" in s
 
 
 def test_audio_curto_fora_do_assunto_pede_para_repetir(monkeypatch):

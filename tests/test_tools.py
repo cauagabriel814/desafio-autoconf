@@ -39,7 +39,7 @@ def test_buscar_estoque_com_filtros(t):
 
 def test_buscar_estoque_sem_filtro_devolve_tudo(t):
     r = json.loads(t["buscar_estoque"].invoke({}))
-    assert len(r["encontrados"]) == 20
+    assert len(r["encontrados"]) == 22
 
 
 def test_buscar_estoque_por_modelo_e_ano(t):
@@ -50,7 +50,7 @@ def test_buscar_estoque_por_modelo_e_ano(t):
 def test_buscar_estoque_sem_resultado_devolve_estoque_completo(t):
     r = json.loads(t["buscar_estoque"].invoke({"marca_ou_modelo": "Hilux"}))
     assert r["encontrados"] == []
-    assert "aviso" in r and len(r["estoque_completo"]) == 20
+    assert "aviso" in r and len(r["estoque_completo"]) == 22
 
 
 def test_buscar_estoque_tipo_invalido_e_rejeitado(t):
