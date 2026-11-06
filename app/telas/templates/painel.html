@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titulo %}Leads · {{ loja }}{% endblock %}
+{% macro url(status=status, urgencia=urgencia, canal=canal, pagina=1) -%}
+?status={{ status }}&urgencia={{ urgencia }}&canal={{ canal }}&pagina={{ pagina }}
+{%- endmacro %}
+{% block head %}
+<style>
+  .filtros { display: flex; flex-direction: column; gap: 8px; }
+  .paginacao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .paginas { display: flex; flex-wrap: wrap; gap: 4px; }
+  .paginas a, .paginas span { min-width: 34px; text-align: center; padding: 4px 8px; border-radius: 6px;
+                              border: 1px solid var(--line); text-decoration: none; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .paginas .atual { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .paginas .off { color: var(--muted); opacity: .5; }
+</style>
+{% endblock %}
+{% block conteudo %}
+<div>
+  <h1>Leads</h1>
+  <p class="sub">Transferidos e mais urgentes no topo.</p>
+</div>
+
+<div class="filtros">
+  <div class="linha">
+    <span class="sub">Canal:</span>
+    <a class="pill {{ 'on' if canal == '' }}" href="{{ url(canal='') }}">WhatsApp e Tela</a>
+    <a class="pill {{ 'on' if canal == 'whatsapp' }}" href="{{ url(canal='whatsapp') }}">WhatsApp</a>
+    <a class="pill {{ 'on' if canal == 'web' }}" href="{{ url(canal='web') }}">Tela</a>
+    <a class="pill {{ 'on' if canal == 'terminal' }}" href="{{ url(canal='terminal') }}">Simulador</a>
+    <a class="pill {{ 'on' if canal == 'todos' }}" href="{{ url(canal='todos') }}">Todos</a>
+  </div>
+  <div class="linha">
+    <span class="sub">Status:</span>
+    <a class="pill {{ 'on' if not status }}" href="{{ url(status='') }}">Todos</a>
+    <a class="pill {{ 'on' if status == 'humano' }}" href="{{ url(status='humano') }}">Com vendedor</a>
+    <a class="pill {{ 'on' if status == 'bot' }}" href="{{ url(status='bot') }}">Com a {{ atendente }}</a>
+    <a class="pill {{ 'on' if status == 'parado' }}" href="{{ url(status='parado') }}">Parados</a>
+    <a class="pill {{ 'on' if status == 'arquivado' }}" href="{{ url(status='arquivado') }}">Arquivados</a>
+    <span class="sub" style="margin-left:12px">Urgência:</span>
+    <a class="pill {{ 'on' if not urgencia }}" href="{{ url(urgencia='') }}">Todas</a>
+    {% for u in ['alta', 'media', 'baixa'] %}
+    <a class="pill {{ 'on' if urgencia == u }}" href="{{ url(urgencia=u) }}">{{ u }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card tabela-wrap">
+  <table>
+    <thead><tr><th>Cliente</th><th>Canal</th><th>Status</th><th>Urgência</th><th>Interesse</th><th>Motivo</th><th>Última mensagem</th></tr></thead>
+    <tbody>
+    {% for l in leads %}
+      <tr class="clicavel" onclick="location.href='/painel/lead/{{ l.id }}'">
+        <td><a href="/painel/lead/{{ l.id }}">{{ l.nome or l.cliente_id }}</a>{% if l.nome %}<br><span class="sub">{{ l.cliente_id }}</span>{% endif %}</td>
+        <td>{{ {'whatsapp': 'WhatsApp', 'web': 'Tela', 'terminal': 'Simulador'}[l.canal] }}</td>
+        <td><span class="pill st-{{ l.status }}">{{ {'humano': 'com vendedor', 'parado': 'parado (#parar)', 'arquivado': 'arquivado (#reset)'}.get(l.status, 'com a ' ~ atendente) }}</span></td>
+        <td>{% if l.urgencia %}<span class="pill {{ 'urg-alta' if l.urgencia == 'alta' }}">{{ l.urgencia }}</span>{% endif %}</td>
+        <td>{{ l.ficha.tipo_interesse or '' }}{% if l.ficha.preco_max %} até R$ {{ '{:,}'.format(l.ficha.preco_max).replace(',', '.') }}{% endif %}</td>
+        <td>{{ (l.motivo or '').replace('_', ' ') }}</td>
+        <td>{{ l.atualizado_em.strftime('%d/%m %H:%M') }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="vazio">Nenhum lead com esses filtros.{% if canal == '' %} Comece uma conversa no <a href="/chat">chat do cliente</a>.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total %}
+<nav class="paginacao" aria-label="Páginas">
+  <span class="sub">{{ inicio + 1 }}–{{ inicio + leads | length }} de {{ total }} leads</span>
+  <div class="paginas">
+    {% if pagina > 1 %}<a href="{{ url(pagina=pagina - 1) }}" aria-label="Página anterior">‹</a>{% else %}<span class="off">‹</span>{% endif %}
+    {% for p in range(1, paginas + 1) %}
+      {% if p == pagina %}<span class="atual" aria-current="page">{{ p }}</span>
+      {% elif p == 1 or p == paginas or (p - pagina) | abs <= 2 %}<a href="{{ url(pagina=p) }}">{{ p }}</a>
+      {% elif (p - pagina) | abs == 3 %}<span class="off">…</span>{% endif %}
+    {% endfor %}
+    {% if pagina < paginas %}<a href="{{ url(pagina=pagina + 1) }}" aria-label="Próxima página">›</a>{% else %}<span class="off">›</span>{% endif %}
+  </div>
+</nav>
+{% endif %}
+{% endblock %}

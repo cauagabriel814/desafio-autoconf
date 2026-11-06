@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div>
+  <h1>Agente de pré-venda</h1>
+  <p class="sub">Primeiro atendimento da {{ loja }} com a {{ atendente }}, assistente virtual.</p>
+</div>
+<div class="grid2">
+  <a class="card" href="/chat" style="text-decoration:none;color:inherit">
+    <h2>T1 · Chat do cliente</h2><p class="sub">Converse com o agente por texto, áudio ou imagem.</p></a>
+  <a class="card" href="/painel" style="text-decoration:none;color:inherit">
+    <h2>T2 · Leads</h2><p class="sub">Quem foi transferido e precisa de vendedor agora.</p></a>
+  <a class="card" href="/painel/exportar" style="text-decoration:none;color:inherit">
+    <h2>T4 · Exportar para CRM</h2><p class="sub">CSV, JSON, HubSpot, Pipedrive e Salesforce.</p></a>
+  <a class="card" href="/painel/estoque" style="text-decoration:none;color:inherit">
+    <h2>T5 · Estoque</h2><p class="sub">Carros que o agente pode oferecer.</p></a>
+  <a class="card" href="/painel/whatsapp" style="text-decoration:none;color:inherit">
+    <h2>WhatsApp</h2><p class="sub">Conectar o número pela Evolution API.</p></a>
+  <a class="card" href="/docs" style="text-decoration:none;color:inherit">
+    <h2>API</h2><p class="sub">Documentação das rotas (Swagger).</p></a>
+</div>
+{% endblock %}
