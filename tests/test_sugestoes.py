@@ -17,6 +17,27 @@ def test_tipo_e_orcamento_lista_todos_mais_perto_do_teto_primeiro():
     assert "Compass" not in s
 
 
+def test_marca_pedida_continua_quando_ele_so_diz_o_valor():
+    from app.db import repo
+
+    # o estoque padrão não tem BYD: cadastra um só para este teste
+    byd = repo.salvar_carro({"marca": "BYD", "modelo": "Dolphin", "ano": 2024, "km": 5, "preco": 89000, "tipo": "Hatch"})
+    try:
+        # "queria um BYD" -> mostrou o BYD; "100 mil" não pode virar a lista de todo o estoque até 100 mil
+        s = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000})
+        l = _linhas(s)
+        assert len(l) == 1 and "BYD Dolphin" in l[0]
+        assert "Kwid" not in s and "Onix" not in s
+        # nenhum BYD cabe em 60 mil: diz isso e mostra o BYD mais perto, sem encher de outras marcas
+        s2 = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 60000})
+        assert "cabe nesse valor" in s2 and "BYD Dolphin" in s2 and "Kwid" not in s2
+        # se ele muda de ideia e pede outro tipo, a lista volta a ser do tipo
+        s3 = sugestoes({"modelos_interesse": ["BYD"], "tipo_interesse": "SUV", "preco_max": 120000})
+        assert "Duster" in s3
+    finally:
+        repo.excluir_carro(byd["id"])
+
+
 def test_depois_da_lista_vem_a_pergunta_exata():
     # tem SUV e a Saveiro sem ano: depois da lista, a pergunta é o valor (1ª pendente), dita com todas as letras
     s = sugestoes({"tipo_interesse": "SUV", "troca_tem": True, "troca_modelo": "Saveiro"})
