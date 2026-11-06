@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 # Mensagem que é só cumprimento (sem pedido): "oi", "boa tarde", "olá, tudo bem?", "e aí", "#thread" sozinho
 _SO_CUMPRIMENTO = re.compile(
-    r"^(oi+|ol[aá]|opa|e a[ií]|eai|eae|bom dia|boa tarde|boa noite|hey|hello|salve|fala|tudo bem|tudo bom)"
+    r"^(oi+|[oó]l[aá]|opa|e a[ií]|eai|eae|bom dia|boa tarde|boa noite|hey|hello|salve|fala|tudo bem|tudo bom)"
     r"([\s,!.?]+(oi+|ol[aá]|tudo (bem|bom|certo|tranquilo)|como vai|bom dia|boa tarde|boa noite|pessoal|lia|"
     r"tudo bem com (voc[eê]|vc)))*[\s,!.?😊🙂👋]*$",
     re.IGNORECASE,

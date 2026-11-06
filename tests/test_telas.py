@@ -76,7 +76,7 @@ def test_ficha_do_lead_abre(client):
     assert "Paula" in r.text and "R$ 120.000" in r.text and "Gol 2018" in r.text
     # o que não foi perguntado aparece escrito, não em branco
     assert "ainda não perguntado" in r.text and "não perguntado" in r.text
-    assert "Gerar resumo" in r.text and "Ver conversa completa" in r.text
+    assert "Gerar resumo" in r.text and "Conversa completa" in r.text and "conversa-box" in r.text
 
 
 def test_resumo_sob_demanda(client, monkeypatch):

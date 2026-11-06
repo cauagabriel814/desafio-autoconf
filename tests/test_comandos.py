@@ -119,7 +119,7 @@ def test_texto_normal_nao_e_comando():
 def test_reconhece_so_cumprimento():
     from app.pipeline.orquestrador import _SO_CUMPRIMENTO
 
-    for t in ("Oi", "oii", "Olá, boa tarde", "Boa noite!", "Oi, tudo bem?", "e aí", "Olá, tudo bem com você?", "Opa 👋"):
+    for t in ("Oi", "oii", "Olá, boa tarde", "Boa noite!", "Oi, tudo bem?", "e aí", "Olá, tudo bem com você?", "Opa 👋", "ólá", "Ólá!"):
         assert _SO_CUMPRIMENTO.match(t), t
     for t in ("Oi, queria ver uns carros", "Boa tarde, tem SUV?", "Oi, quanto tá o Civic?", "Quero um carro"):
         assert not _SO_CUMPRIMENTO.match(t), t
