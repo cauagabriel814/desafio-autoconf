@@ -71,7 +71,9 @@ def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = Fal
     if unico:
         base = (
             "Como montar a mensagem: 1) uma frase curta reagindo ao que o cliente acabou de dizer, sem \"Aqui "
-            "estão\"; 2) o carro da lista, em uma linha, sem negrito; 3) diga, de um jeito natural e simpático, "
+            "estão\"; 2) o carro da lista numa FRASE corrida, não numa lista nem com traço no começo, dizendo o "
+            "nome, o ano, os km e o preço do jeito que está na lista (ex.: \"Temos o BYD Dolphin 2024, com 5 km, "
+            "por R$ 89.000\"); 3) diga, de um jeito natural e simpático, "
             "como um vendedor falaria, com as suas próprias palavras e junto de um comentário sobre o carro, que "
             "esse é o ÚNICO que a loja tem agora com o que ele pediu (ideias: \"é o único que chegou por aqui\", "
             "\"por enquanto só ele no pátio\", \"tenho só esse na loja\"; não copie estas frases). Sem tom de "
@@ -331,9 +333,11 @@ def limpar_formatacao(texto: str) -> str:
     # Linhas de carro (com km e R$): uma por linha, todas com "- ", sem linha em branco entre elas
     linhas = t.split("\n")
     carro = re.compile(r"km.*R\$|R\$.*km", re.IGNORECASE)
-    for i, l in enumerate(linhas):
-        if carro.search(l) and not l.lstrip().startswith(("-", "•")):
-            linhas[i] = "- " + l.strip()
+    com_carro = [i for i, l in enumerate(linhas) if carro.search(l)]
+    if len(com_carro) >= 2:  # um carro só é uma frase ("Temos o BYD Dolphin 2024, com 5 km, por R$ 89.000"), não lista
+        for i in com_carro:
+            if not linhas[i].lstrip().startswith(("-", "•")):
+                linhas[i] = "- " + linhas[i].strip()
     t = "\n".join(linhas)
     for _ in range(2):  # 2x: pares de itens sobrepostos
         t = re.sub(r"(\n\s*[-•][^\n]*)\n\s*\n(?=\s*[-•])", r"\1\n", t)
