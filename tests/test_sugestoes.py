@@ -18,39 +18,33 @@ def test_tipo_e_orcamento_lista_todos_mais_perto_do_teto_primeiro():
 
 
 def test_marca_pedida_continua_quando_ele_so_diz_o_valor():
-    from app.db import repo
-
-    # o estoque padrão não tem BYD: cadastra um só para este teste
-    byd = repo.salvar_carro({"marca": "BYD", "modelo": "Dolphin", "ano": 2024, "km": 5, "preco": 89000, "tipo": "Hatch"})
-    try:
-        # "queria um BYD" -> mostrou o BYD; "100 mil" não pode virar a lista de todo o estoque até 100 mil
-        s = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000})
-        l = _linhas(s)
-        assert len(l) == 1 and "BYD Dolphin" in l[0]
-        assert "Kwid" not in s and "Onix" not in s
-        # nenhum BYD cabe em 60 mil: diz isso e mostra o BYD mais perto, sem encher de outras marcas
-        s2 = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 60000})
-        assert "cabe nesse valor" in s2 and "BYD Dolphin" in s2 and "Kwid" not in s2
-        # um carro só: avisa, de forma natural, que é o único, e não compara ("o mais novinho" não faz sentido)
-        assert "ÚNICO" in s and "NÃO diga" in s and "mais novo, menos km" not in s
-        assert "FRASE corrida" in s  # um carro só vira frase, não lista com traço
-        s_pedido = sugestoes({"modelos_interesse": ["BYD"]}, ["BYD"])
-        assert "ÚNICO" in s_pedido and "BYD Dolphin" in s_pedido
-        # o BYD já foi mostrado e ele só disse o valor: não manda a lista de novo, retoma em palavras
-        antes = ["Olha só, temos um BYD disponível:\n- BYD Dolphin 2024 · 5 km · R$ 89.000\n\nAté quanto pensa em investir?"]
-        s_retoma = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000}, None, None, antes)
-        assert "JÁ mostrou" in s_retoma and "NÃO liste de novo" in s_retoma and not _linhas(s_retoma)
-        assert "pergunte SÓ isto" in s_retoma
-        # mas se ainda não tinha mostrado, mostra
-        assert _linhas(sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000}, None, None, ["Oi!"]))
-        # vários carros: segue com os destaques de sempre
-        s_varios = sugestoes({"tipo_interesse": "SUV", "preco_max": 120000})
-        assert "ÚNICO" not in s_varios and "mais novo, menos km" in s_varios
-        # se ele muda de ideia e pede outro tipo, a lista volta a ser do tipo
-        s3 = sugestoes({"modelos_interesse": ["BYD"], "tipo_interesse": "SUV", "preco_max": 120000})
-        assert "Duster" in s3
-    finally:
-        repo.excluir_carro(byd["id"])
+    # o estoque padrão tem um BYD só (o Dolphin)
+    # "queria um BYD" -> mostrou o BYD; "100 mil" não pode virar a lista de todo o estoque até 100 mil
+    s = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000})
+    l = _linhas(s)
+    assert len(l) == 1 and "BYD Dolphin" in l[0]
+    assert "Kwid" not in s and "Onix" not in s
+    # nenhum BYD cabe em 60 mil: diz isso e mostra o BYD mais perto, sem encher de outras marcas
+    s2 = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 60000})
+    assert "cabe nesse valor" in s2 and "BYD Dolphin" in s2 and "Kwid" not in s2
+    # um carro só: avisa, de forma natural, que é o único, e não compara ("o mais novinho" não faz sentido)
+    assert "ÚNICO" in s and "NÃO diga" in s and "mais novo, menos km" not in s
+    assert "FRASE corrida" in s  # um carro só vira frase, não lista com traço
+    s_pedido = sugestoes({"modelos_interesse": ["BYD"]}, ["BYD"])
+    assert "ÚNICO" in s_pedido and "BYD Dolphin" in s_pedido
+    # o BYD já foi mostrado e ele só disse o valor: não manda a lista de novo, retoma em palavras
+    antes = ["Olha só, temos um BYD disponível:\n- BYD Dolphin 2024 · 5 km · R$ 89.000\n\nAté quanto pensa em investir?"]
+    s_retoma = sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000}, None, None, antes)
+    assert "JÁ mostrou" in s_retoma and "NÃO liste de novo" in s_retoma and not _linhas(s_retoma)
+    assert "pergunte SÓ isto" in s_retoma
+    # mas se ainda não tinha mostrado, mostra
+    assert _linhas(sugestoes({"modelos_interesse": ["BYD"], "preco_max": 100000}, None, None, ["Oi!"]))
+    # vários carros: segue com os destaques de sempre
+    s_varios = sugestoes({"tipo_interesse": "SUV", "preco_max": 120000})
+    assert "ÚNICO" not in s_varios and "mais novo, menos km" in s_varios
+    # se ele muda de ideia e pede outro tipo, a lista volta a ser do tipo
+    s3 = sugestoes({"modelos_interesse": ["BYD"], "tipo_interesse": "SUV", "preco_max": 120000})
+    assert "Duster" in s3
 
 
 def test_depois_da_lista_vem_a_pergunta_exata():
