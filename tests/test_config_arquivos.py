@@ -69,7 +69,7 @@ def test_config_persiste_no_banco():
 
 def test_tela_config(client):
     html = client.get("/painel/config").text
-    assert "Quando responder em áudio" in html and "Bibliotecas" in html and "gpt-4o-mini" in html
+    assert "Quando o agente responde em áudio" in html and "Bibliotecas" in html and "gpt-4o-mini" in html
 
 
 @pytest.mark.parametrize("modo, origem, audio", [

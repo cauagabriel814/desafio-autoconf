@@ -487,3 +487,16 @@ def test_bolha_do_lead_nao_tem_linhas_em_branco_entre_o_texto_e_o_horario(client
         texto, resto = b.split('<span class="meta">', 1)
         assert texto.strip() == texto and "\n" not in texto  # nada entre o texto e o horário
         assert resto.endswith("</span>")
+
+
+def test_tela_de_config_mostra_todas_as_opcoes_com_interruptores(client):
+    from app import configuracao
+
+    html = client.get("/painel/config").text
+    for chave in configuracao.EDITAVEIS:  # nenhuma opção fica de fora da tela
+        assert f'name="{chave}"' in html or f'data-chave="{chave}"' in html, chave
+    # on/off viram interruptores, e as seções existem
+    assert 'data-chave="aceitar_proprio_numero"' in html and 'data-chave="test"' in html
+    assert 'role="switch"' in html and "barra-salvar" in html
+    for secao in ("Respostas", "Identidade", "WhatsApp", "Testes", "Memória"):
+        assert f"<h2>{secao}</h2>" in html, secao
