@@ -1,0 +1,28 @@
+[project]
+name = "autoconf-agente"
+version = "0.1.0"
+description = "Agente de pré-venda para revenda de veículos (desafio técnico Autoconf)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.17",
+    "jinja2>=3.1",
+    "httpx>=0.27",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+    "sqlalchemy>=2.0.36,<2.1",
+    "openai>=1.55,<2",
+    "langchain>=0.3,<0.4",  # exigido pela integração Langfuse <-> LangChain
+    "langchain-core>=0.3.30,<0.4",
+    "langchain-openai>=0.3,<0.4",
+    "langgraph>=0.2.60,<0.3",
+    "langfuse>=2.57,<3",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pillow>=10"]  # pillow: gera imagens no teste de tipos de arquivo
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
