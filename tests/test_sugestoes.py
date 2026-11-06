@@ -331,3 +331,31 @@ def test_perguntou_o_preco_do_carro_que_ja_mostrou_responde_de_novo():
     antes = ["- VW T-Cross Comfortline 2023 · 19.000 km · R$ 118.500\n\nE até quanto você pensa em investir?"]
     s = sugestoes({"tipo_interesse": "SUV"}, ["VW T-Cross Comfortline 2023"], None, antes)
     assert "JÁ mostrou" not in s and "118.500" in s  # ele nomeou o carro: o preço sai de novo
+
+
+def test_gostou_de_algum_depois_de_lista_mesmo_com_marca_que_nao_temos_ou_com_varios_carros():
+    from app.agente.grafo import perguntar_escolha
+
+    base = {"preco_max": 100000, "quer_financiar": None}
+    # pediu uma marca que não existe (nada escolhido): depois da lista, pergunta se gostou de algum
+    assert perguntar_escolha({**base, "modelos_interesse": ["Ferrari"]})
+    # marca com vários carros (VW: Polo e T-Cross): ainda não escolheu um
+    assert perguntar_escolha({**base, "modelos_interesse": ["VW"]})
+    # citou UM carro do estoque (Kicks) ou marca de um carro só (BYD): já escolheu, não pergunta
+    assert not perguntar_escolha({**base, "modelos_interesse": ["Kicks"]})
+    assert not perguntar_escolha({**base, "modelos_interesse": ["BYD"]})
+
+
+def test_marca_pedida_depois_do_valor_respeita_o_limite_de_preco():
+    # "uma da VW" com 100 mil: só o Polo (R$ 89.900); o T-Cross (R$ 118.500) passa do valor
+    s = sugestoes({"preco_max": 100000, "modelos_interesse": ["VW"]}, ["VW"])
+    assert "Polo" in s and "T-Cross" not in s
+    # com 200 mil cabem os dois
+    s2 = sugestoes({"preco_max": 200000, "modelos_interesse": ["VW"]}, ["VW"])
+    assert "Polo" in s2 and "T-Cross" in s2
+    # nenhum VW cabe em 50 mil: diz isso e mostra os mais perto
+    s3 = sugestoes({"preco_max": 50000, "modelos_interesse": ["VW"]}, ["VW"])
+    assert "cabe nesse valor" in s3 and "Polo" in s3
+    # modelo específico: mostra mesmo acima do valor (ele perguntou por aquele carro)
+    s4 = sugestoes({"preco_max": 100000, "modelos_interesse": ["T-Cross"]}, ["T-Cross"])
+    assert "T-Cross" in s4 and "118.500" in s4
