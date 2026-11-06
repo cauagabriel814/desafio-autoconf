@@ -363,3 +363,27 @@ def test_parcial_tambem_tem_trava():
     f = {**BASE, "troca_tem": True, "troca_modelo": "Saveiro", "perguntas_feitas": {"troca": 2}}
     assert "troca" not in pendentes(f)
     assert "✅ Carro na troca (Saveiro (falta o ano))" in checklist(f)
+
+
+def test_motivo_da_transferencia_sempre_legivel_no_resumo(monkeypatch):
+    from types import SimpleNamespace
+
+    from app import llm
+    from app.agente import tools
+    from app.agente.ficha import MOTIVO_PARA_VENDEDOR, motivo_legivel
+
+    assert set(MOTIVO_PARA_VENDEDOR) >= {"reclamacao", "negociacao", "pedido_credito", "urgencia", "pediu_humano",
+                                         "sem_resposta", "qualificado"}
+    assert "reclamou" in motivo_legivel("reclamacao") and "visita" in motivo_legivel("qualificado")
+    assert motivo_legivel("outro_motivo") == "outro motivo"  # desconhecido: não quebra
+
+    class _Chat:
+        def invoke(self, *_a, **_k):
+            return SimpleNamespace(content="Quer um SUV até 120 mil.")
+
+    monkeypatch.setattr(llm, "chat", lambda *a, **k: _Chat())
+    l = repo.obter_ou_criar_lead("web", "resumo-motivo")
+    r = tools.gerar_resumo(l.id, "negociacao")
+    assert r.startswith("Motivo da transferência: ") and "negociar" in r and r.endswith("Quer um SUV até 120 mil.")
+    # sem motivo conhecido (resumo avulso): só o texto do modelo
+    assert tools.gerar_resumo(l.id, "atendimento em andamento") == "Quer um SUV até 120 mil."

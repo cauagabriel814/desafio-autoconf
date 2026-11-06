@@ -23,7 +23,7 @@ def _texto_conversa(lead_id: int) -> str:
 
 
 def gerar_resumo(lead_id: int, motivo: str, callbacks: list | None = None) -> str:
-    from app.agente.ficha import ficha_para_resumo
+    from app.agente.ficha import MOTIVO_PARA_VENDEDOR, ficha_para_resumo
 
     lead = repo.obter_lead(lead_id)
     texto = prompts.RESUMO_VENDEDOR.format(
@@ -32,7 +32,10 @@ def gerar_resumo(lead_id: int, motivo: str, callbacks: list | None = None) -> st
         conversa=_texto_conversa(lead_id),
     )
     resp = llm.chat(temperature=0).invoke(texto, config={"callbacks": callbacks or []})
-    return resp.content.strip()
+    corpo = resp.content.strip()
+    if motivo in MOTIVO_PARA_VENDEDOR:  # o motivo da transferência vai sempre, escrito pelo código (não pelo modelo)
+        return f"Motivo da transferência: {MOTIVO_PARA_VENDEDOR[motivo]}\n{corpo}"
+    return corpo
 
 
 def criar_tools(lead_id: int, callbacks: list | None = None) -> list:

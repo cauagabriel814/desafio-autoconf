@@ -15,6 +15,9 @@ from app.exportar import CAMPOS, FORMATOS, MAPEAMENTOS
 
 router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+from app.agente.ficha import motivo_legivel  # noqa: E402
+
+templates.env.globals["motivo_legivel"] = motivo_legivel
 
 
 _CSS = Path(__file__).parent / "static" / "estilo.css"

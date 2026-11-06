@@ -51,8 +51,9 @@
     <h2>Conversa</h2>
     <div class="resumo-caixa">
       {% if t %}
-        <p class="sub" style="margin:0">Passada para o vendedor · motivo <b>{{ t.motivo.replace('_', ' ') }}</b> ·
-          urgência <b>{{ t.urgencia }}</b> · {{ t.criado_em.strftime('%d/%m %H:%M') }}</p>
+        <p class="sub" style="margin:0">Passada para o vendedor · urgência <b>{{ t.urgencia }}</b> ·
+          {{ t.criado_em.strftime('%d/%m %H:%M') }}</p>
+        <p class="resumo" style="margin:0"><b>Por que foi para o vendedor:</b> {{ motivo_legivel(t.motivo) }}</p>
       {% endif %}
       <p class="resumo" id="resumo">{{ resumo or 'Ainda não há resumo desta conversa.' }}</p>
       <div class="linha">

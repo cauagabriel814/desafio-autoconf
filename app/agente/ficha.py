@@ -443,6 +443,24 @@ ROTULO_MOTIVO = {
 }
 
 
+# Por que a conversa foi para o vendedor, escrito para ele (aparece no resumo e na tela do lead, sempre)
+MOTIVO_PARA_VENDEDOR = {
+    "reclamacao": "o cliente reclamou ou está insatisfeito. Atender com cuidado e sem empurrar carro.",
+    "negociacao": "o cliente quer negociar: pediu desconto, propôs um valor ou perguntou quanto a loja paga no carro dele.",
+    "pedido_credito": "o cliente pediu crédito, parcela ou simulação de financiamento.",
+    "urgencia": "o cliente tem urgência (precisa do carro logo).",
+    "pediu_humano": "o cliente pediu para falar com uma pessoa.",
+    "sem_resposta": "o cliente fez uma pergunta que a assistente não sabe responder (não consta no estoque: garantia, "
+                    "histórico, documentação, endereço...). Responder a dúvida dele primeiro.",
+    "qualificado": "lead qualificado: o cliente definiu o que quer e combinou a visita na loja. Confirmar o horário.",
+}
+
+
+def motivo_legivel(motivo: str | None) -> str:
+    """Frase que explica o motivo da transferência (ou o próprio texto, se não for um motivo conhecido)."""
+    return MOTIVO_PARA_VENDEDOR.get(motivo or "", (motivo or "").replace("_", " "))
+
+
 def acao_obrigatoria(motivo: str, ficha: dict | None = None, com_lista: bool = False) -> str:
     """Substitui o checklist quando a conversa precisa ir para um vendedor."""
     if motivo == "qualificado":
