@@ -58,7 +58,7 @@ def perguntar_escolha(ficha: dict) -> bool:
     """
     falta = ficha_mod.pendentes(ficha)
     # parte faltando de algo que ele já contou (ex.: o ano da troca) vem antes: senão a resposta "É 2017" fica solta
-    return bool(falta) and falta[0] in ("pagamento", "visita") and not ficha.get("modelos_interesse")
+    return bool(falta) and falta[0] in ("interesse", "pagamento", "visita") and not ficha.get("modelos_interesse")
 
 
 def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = False) -> str:
@@ -354,10 +354,10 @@ def faltando_para_qualificar(ficha: dict) -> list[str]:
         if not f.get("visita"):
             falta.append("que dia e período ele pode trazer o carro na loja para a avaliação")
         return falta
-    if not (f.get("tipo_interesse") or f.get("modelos_interesse")):
-        falta.append("que tipo de carro ele procura (SUV, sedã, hatch ou picape)")
     if not (f.get("preco_max") or f.get("preco_min")):
         falta.append("até quanto ele pensa em investir")
+    if not (f.get("tipo_interesse") or f.get("modelos_interesse")):
+        falta.append("que tipo de carro ele procura (SUV, sedã, hatch ou picape)")
     if f.get("quer_financiar") is None:
         falta.append("se vai pagar à vista ou financiar")
     if not f.get("visita"):
@@ -518,6 +518,13 @@ def _construir(lead_id: int, callbacks: list):
             prox = ficha_mod.proxima_pergunta(ficha)
             depois = f"Se ele escolheu um, no fim pergunte SÓ isto: {prox}." if prox else ""
             msgs.append(SystemMessage(f"[instrução para esta resposta] {ESCOLHA_RESPONDIDA.format(depois=depois)}"))
+        elif (prox := ficha_mod.proxima_pergunta(ficha)) and ficha_mod.pendentes(ficha)[0] != "visita":
+            # Conversa comum: a pergunta de agora é a do checklist, uma só (sem isso ela perguntava o tipo antes do valor)
+            rotulos = {campo: rot for campo, rot, *_ in ficha_mod._itens(ficha)}
+            outros = [rotulos[c] for c in ficha_mod.pendentes(ficha)[1:]]
+            nao_agora = f" Ainda NÃO pergunte sobre: {', '.join(outros)}." if outros else ""
+            msgs.append(SystemMessage(f"[instrução para esta resposta] No fim da mensagem, pergunte SÓ isto: {prox}. "
+                                      f"Uma única pergunta, sem juntar com outra.{nao_agora}"))
         return {"messages": msgs}
 
     def agente(estado: Estado) -> dict:
