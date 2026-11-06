@@ -241,6 +241,13 @@ def historico(lead_id: int, n: int | None = None) -> list[Mensagem]:
 
 # ---------- Carros ----------
 
+def combina_texto(texto: str, carro: dict) -> bool:
+    """O carro bate com o que o cliente disse? Todas as palavras precisam aparecer ("Jeep Renegade" não é o Compass)."""
+    alvo = _sem_acento(f"{carro['marca']} {carro['modelo']} {carro['ano']}")
+    termos = [t for t in _sem_acento(texto).split() if len(t) > 1]
+    return bool(termos) and all(t in alvo for t in termos)
+
+
 def buscar_carros(
     tipo: str | None = None,
     preco_max: int | None = None,
