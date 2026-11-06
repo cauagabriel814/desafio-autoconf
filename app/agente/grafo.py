@@ -61,16 +61,32 @@ def perguntar_escolha(ficha: dict) -> bool:
     return bool(falta) and falta[0] in ("pagamento", "visita") and not ficha.get("modelos_interesse")
 
 
-def _fecho(ficha: dict, ja_comentado: list[str] | None = None) -> str:
-    """Depois da lista: a pergunta EXATA que vem a seguir (calculada pelo código, não escolhida pelo agente)."""
+def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = False) -> str:
+    """Depois da lista: a pergunta EXATA que vem a seguir (calculada pelo código, não escolhida pelo agente).
+
+    `unico`: a lista tem um carro só. Aí não há com quem comparar ("o mais novinho" não faz sentido):
+    o agente avisa, de um jeito humano, que é o único que a loja tem com aquele pedido.
+    """
     prox = PERGUNTA_ESCOLHA if perguntar_escolha(ficha) else ficha_mod.proxima_pergunta(ficha)
-    base = (
-        "Como montar a mensagem: 1) uma frase curta reagindo ao que o cliente acabou de dizer (o tipo, o "
-        "orçamento, a família, a troca...), sem \"Aqui estão\"; 2) TODOS os carros desta lista, NA MESMA ORDEM "
-        "(do mais barato ao mais caro), um por linha, sem cortar nenhum e sem negrito; 3) um comentário curto de "
-        "vendedor sobre 1 ou 2 deles, só com os dados da lista (mais novo, menos km, mais em conta, mais perto do "
-        "orçamento). "
-    )
+    if unico:
+        base = (
+            "Como montar a mensagem: 1) uma frase curta reagindo ao que o cliente acabou de dizer, sem \"Aqui "
+            "estão\"; 2) o carro da lista, em uma linha, sem negrito; 3) diga, de um jeito natural e simpático, "
+            "como um vendedor falaria, com as suas próprias palavras e junto de um comentário sobre o carro, que "
+            "esse é o ÚNICO que a loja tem agora com o que ele pediu (ideias: \"é o único que chegou por aqui\", "
+            "\"por enquanto só ele no pátio\", \"tenho só esse na loja\"; não copie estas frases). Sem tom de "
+            "aviso de sistema, e só uma vez: se você já disse isso antes nesta conversa, não repita. Comente só o "
+            "carro em si (ano, km), sem comparar com outros: NÃO diga \"o mais novinho\", \"o mais em conta\", "
+            "\"o mais barato\" nem nenhum superlativo, porque não existe outro para comparar. "
+        )
+    else:
+        base = (
+            "Como montar a mensagem: 1) uma frase curta reagindo ao que o cliente acabou de dizer (o tipo, o "
+            "orçamento, a família, a troca...), sem \"Aqui estão\"; 2) TODOS os carros desta lista, NA MESMA ORDEM "
+            "(do mais barato ao mais caro), um por linha, sem cortar nenhum e sem negrito; 3) um comentário curto "
+            "de vendedor sobre 1 ou 2 deles, só com os dados da lista (mais novo, menos km, mais em conta, mais "
+            "perto do orçamento). "
+        )
     if ja_comentado:
         base += ("Você JÁ comentou nesta conversa: " + " | ".join(f'"{c}"' for c in ja_comentado)
                  + ". Não repita esses comentários nem a mesma ideia: destaque outro carro ou outro ponto, "
@@ -109,13 +125,41 @@ def comentarios_feitos(lead_id: int) -> list[str]:
     return feitos[-3:]
 
 
-def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado: list[str] | None = None) -> str:
+def _ja_citado(carro: dict, textos: list[str]) -> bool:
+    """O carro (nome e preço) já apareceu numa das mensagens do agente."""
+    preco = f"{carro['preco']:,}".replace(",", ".")
+    return any(carro["nome"] in t and preco in t for t in textos)
+
+
+def textos_do_agente(lead_id: int, n: int = 2) -> list[str]:
+    """As últimas mensagens do agente (para não mandar de novo a lista que ele acabou de mandar)."""
+    return [m.texto for m in repo.historico(lead_id, 8) if m.papel == "agente"][-n:]
+
+
+def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado: list[str] | None = None,
+              mostrados: list[str] | None = None) -> str:
     """O código escolhe os carros a mostrar; o agente só apresenta.
 
     `modelos_agora`: modelos citados NESTA mensagem (os antigos da ficha não contam).
     `ja_comentado`: comentários que o agente já fez (para não repetir).
+    `mostrados`: últimas mensagens do agente; se os carros desta lista já estão nelas, não se lista de novo.
     """
-    FECHO_SUGESTAO = _fecho(ficha, ja_comentado)  # noqa: N806
+    def fecho(carros: list[dict]) -> str:
+        return _fecho(ficha, ja_comentado, unico=len(carros) == 1)
+
+    def retoma(carros: list[dict]) -> str | None:
+        """O carro único da lista já foi mostrado na mensagem anterior: retoma em palavras, sem repetir a linha."""
+        if len(carros) != 1 or not mostrados or not _ja_citado(carros[0], mostrados):
+            return None
+        prox = PERGUNTA_ESCOLHA if perguntar_escolha(ficha) else ficha_mod.proxima_pergunta(ficha)
+        retomar = (f"diga, de um jeito natural, que o {carros[0]['nome']} que você acabou de mostrar é o único "
+                   "que a loja tem com o que ele pediu e que ele cabe no valor dele")
+        return (f"Você JÁ mostrou o {carros[0]['nome']} na mensagem anterior. NÃO liste de novo, "
+                "não repita a linha com km e preço e não fale em \"te mando a lista\". Como montar a mensagem: "
+                f"1) uma frase curta reagindo ao que o cliente acabou de dizer; 2) {retomar}, sem superlativos "
+                "(\"o mais novinho\") e sem repetir comentário que já fez. "
+                + (f"No fim da mensagem, pergunte SÓ isto: {prox}. Não pergunte mais nada." if prox else ""))
+
     tipo, pmax, pmin = ficha.get("tipo_interesse"), ficha.get("preco_max"), ficha.get("preco_min")
     modelos = modelos_agora or []
     achados, faltando = [], []
@@ -127,9 +171,11 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
             faltando.append(m)
 
     if achados:
-        lista = "\n".join(_linha_carro(c) for c in achados[:MAX_CARROS])
+        if (r := retoma(achados[:MAX_CARROS])):
+            return r
+        lista ="\n".join(_linha_carro(c) for c in achados[:MAX_CARROS])
         return (f"MOSTRE AGORA, nesta mensagem, o(s) carro(s) que o cliente pediu:\n{lista}\n"
-                f"{destaques(achados[:MAX_CARROS])}\n{FECHO_SUGESTAO}")
+                f"{destaques(achados[:MAX_CARROS])}\n{fecho(achados[:MAX_CARROS])}")
 
     # O cliente já pediu um carro ou marca (ex.: "um BYD") e agora só afinou o valor: a lista continua sendo DELE,
     # não de todo o estoque até aquele preço
@@ -140,16 +186,18 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
         if do_interesse:
             cabem = [c for c in do_interesse if (not pmax or c["preco"] <= pmax) and (not pmin or c["preco"] >= pmin)]
             if cabem:
-                lista = "\n".join(_linha_carro(c) for c in sorted(cabem, key=lambda c: c["preco"])[:MAX_CARROS])
+                if (r := retoma(sorted(cabem, key=lambda c: c["preco"])[:MAX_CARROS])):
+                    return r
+                lista ="\n".join(_linha_carro(c) for c in sorted(cabem, key=lambda c: c["preco"])[:MAX_CARROS])
                 return (f"O cliente já pediu {', '.join(ficha['modelos_interesse'])} e agora disse o valor. MOSTRE AGORA, "
                         "nesta mensagem, só os carros que ele pediu e que cabem no valor (não ofereça outros modelos "
-                        f"nem outras marcas):\n{lista}\n{destaques(cabem[:MAX_CARROS])}\n{FECHO_SUGESTAO}")
+                        f"nem outras marcas):\n{lista}\n{destaques(cabem[:MAX_CARROS])}\n{fecho(cabem[:MAX_CARROS])}")
             if not tipo:  # tem o que ele quer no estoque, mas fora do valor: diz isso e mostra o mais perto
                 alvo = pmax or pmin
                 perto = sorted(sorted(do_interesse, key=lambda c: abs(c["preco"] - alvo))[:3], key=lambda c: c["preco"])
                 lista = "\n".join(_linha_carro(c) for c in perto)
                 return (f"Nenhum {', '.join(ficha['modelos_interesse'])} do estoque cabe nesse valor. Diga isso com "
-                        f"clareza e mostre estes, que são os mais perto do valor dele:\n{lista}\n{FECHO_SUGESTAO}")
+                        f"clareza e mostre estes, que são os mais perto do valor dele:\n{lista}\n{fecho(perto)}")
 
     parecidos = repo.buscar_carros(tipo=tipo, preco_max=pmax, preco_min=pmin) if (tipo or pmax or pmin) else []
     parecidos.sort(key=lambda c: c["preco"])  # sempre do mais barato ao mais caro (o mais perto do teto fica no fim)
@@ -180,14 +228,16 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
         return (
             f"O cliente pediu {', '.join(faltando)}, que NÃO está no estoque. Diga isso com clareza e, "
             f"na MESMA mensagem, ofereça TODOS estes, que cabem no que ele procura, um por linha (nome, ano, km e "
-            f"preço), do mais barato ao mais caro:\n{lista}\n{destaques(parecidos[:MAX_CARROS])}\n{FECHO_SUGESTAO}"
+            f"preço), do mais barato ao mais caro:\n{lista}\n{destaques(parecidos[:MAX_CARROS])}\n{fecho(parecidos[:MAX_CARROS])}"
         )
 
     if parecidos:
-        lista = "\n".join(_linha_carro(c) for c in parecidos[:MAX_CARROS])
+        if (r := retoma(parecidos[:MAX_CARROS])):
+            return r
+        lista ="\n".join(_linha_carro(c) for c in parecidos[:MAX_CARROS])
         return (
             "O cliente acabou de dizer o que procura ou quanto pode pagar. MOSTRE AGORA, nesta mensagem, "
-            f"estes carros do estoque (são os que combinam):\n{lista}\n{destaques(parecidos[:MAX_CARROS])}\n{FECHO_SUGESTAO}"
+            f"estes carros do estoque (são os que combinam):\n{lista}\n{destaques(parecidos[:MAX_CARROS])}\n{fecho(parecidos[:MAX_CARROS])}"
         )
 
     # Nada combina: oferece o mais próximo do mesmo tipo, ou do orçamento
@@ -451,12 +501,12 @@ def _construir(lead_id: int, callbacks: list):
         if motivo == "qualificado" and estado.get("mostrar_carros"):
             # Qualificou na mesma mensagem em que disse o que procura: mostra os carros E passa para o vendedor
             msgs.append(SystemMessage(
-                f"[instrução para esta resposta] {sugestoes(ficha, estado.get('modelos_agora'), comentarios_feitos(lead_id))}\n"
+                f"[instrução para esta resposta] {sugestoes(ficha, estado.get('modelos_agora'), comentarios_feitos(lead_id), textos_do_agente(lead_id))}\n"
                 f"{ficha_mod.acao_obrigatoria(motivo, ficha, com_lista=True)} Mostre os carros acima ANTES de avisar do vendedor."))
         elif motivo:
             msgs.append(SystemMessage(f"[instrução para esta resposta] {ficha_mod.acao_obrigatoria(motivo, ficha)}"))
         elif estado.get("mostrar_carros"):
-            texto = sugestoes(ficha, estado.get("modelos_agora"), comentarios_feitos(lead_id))
+            texto = sugestoes(ficha, estado.get("modelos_agora"), comentarios_feitos(lead_id), textos_do_agente(lead_id))
             if PERGUNTA_ESCOLHA in texto:  # a lista termina em "gostou de algum?": a próxima mensagem é a resposta
                 repo.atualizar_ficha(lead_id, {"escolha": "perguntada"})
             msgs.append(SystemMessage(f"[instrução para esta resposta] {texto}"))
