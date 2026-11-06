@@ -391,7 +391,10 @@ INSTRUCOES_VOZ = (
 )
 
 DESCREVER_IMAGEM = (
-    "O cliente de uma revenda de carros enviou esta imagem. Descreva em uma frase o que aparece, "
-    "focando no que importa para o atendimento (carro, modelo aparente, estado, documento, anúncio). "
-    "Não invente detalhes que não dá para ver."
+    "O cliente de uma revenda de carros enviou esta imagem. Descreva em até duas frases o que aparece, "
+    "focando no que importa para o atendimento. Se houver um carro, identifique MARCA e MODELO (e o ano ou a "
+    "geração, se der) pelo formato, pelo emblema, pelo logotipo, pela placa ou por qualquer texto na imagem, e diga "
+    "a cor. Se for um print ou anúncio, leia o texto e cite marca, modelo, ano e preço que estiverem escritos. "
+    "Se não tiver certeza do modelo, diga \"parece ser um X\" ou cite só a marca; se não der para saber, diga que o "
+    "modelo não está claro. Se for um documento, diga qual. Não invente detalhes que não dá para ver."
 )
