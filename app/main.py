@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,7 +23,10 @@ async def lifespan(_: FastAPI):
     configuracao.carregar()  # ajustes salvos pela tela /painel/config valem por cima do .env
     if not settings.openai_api_key:
         logging.warning("OPENAI_API_KEY não configurada: o agente vai responder com aviso de configuração.")
+    # A instância do WhatsApp já nasce criada (a Evolution pode demorar a subir: tenta em segundo plano)
+    tarefa = asyncio.create_task(evolution.garantir_instancia())
     yield
+    tarefa.cancel()
 
 
 app = FastAPI(title="Agente de pré-venda Autoconf", lifespan=lifespan)
