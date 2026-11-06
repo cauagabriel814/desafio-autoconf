@@ -48,7 +48,7 @@
       <button type="button" class="btn {{ '' if loop.first else 'sec' }}" data-grupo="{{ chave }}">Rodar {{ g[0][0] | lower }}{{ g[0][1:] }}</button>
     {% endfor %}
   </div>
-  <p class="sub" style="margin:6px 0 0">PDF: {{ contagem.pdf }} conversas, cerca de 1 min · Coleta básica: {{ contagem.coleta }}, cerca de {{ (contagem.coleta / 6) | round | int }} min · Respostas da Autoconf: {{ contagem.autoconf }}, cerca de 1 min · Todos: {{ contagem.todos }} + nota de humanidade, cerca de {{ (contagem.todos / 4.5) | round | int }} min (substitui a rodada completa).</p>
+  <p class="sub" style="margin:6px 0 0">PDF: {{ contagem.pdf }} conversas, cerca de 1 min · Coleta básica: {{ contagem.coleta }}, cerca de {{ (contagem.coleta / 6) | round | int }} min · Respostas da Autoconf: {{ contagem.autoconf }}, cerca de 1 min · Caminhos tristes: {{ contagem.tristes }}, cerca de 3 min · Todos: {{ contagem.todos }} + nota de humanidade, cerca de {{ (contagem.todos / 4.5) | round | int }} min (substitui a rodada completa).</p>
   <div id="andamento" hidden>
     <div class="and-topo">
       <span class="girando" id="and-gira" aria-hidden="true"></span>
