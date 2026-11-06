@@ -68,3 +68,21 @@ def test_texto_fora_do_assunto_continua_bloqueado(monkeypatch):
                         conteudo="qual a cotação do dólar?")
     res = orquestrador.processar([m])
     assert res.bloqueio_entrada == "fora_do_assunto"
+
+
+def test_vw_digitado_de_varios_jeitos_vira_a_marca_do_estoque():
+    # visto no teste manual: "WV" fez a Lia dizer que não tinha VW (tem Polo e T-Cross)
+    from app.pipeline.midia import normalizar_nomes
+
+    assert normalizar_nomes("Quero um carro da WV") == "Quero um carro da VW"
+    assert normalizar_nomes("tem algum volkswagen?") == "tem algum VW?"
+    assert normalizar_nomes("um polo da wv até 100 mil") == "um polo da VW até 100 mil"
+
+
+def test_erro_de_digitacao_em_marca_e_corrigido_sem_mexer_em_portugues_comum():
+    from app.pipeline.midia import normalizar_nomes
+
+    assert normalizar_nomes("uma toyta corola") == "uma Toyota Corolla"
+    for frase in ("quero comprar um carro certa vez", "tenho uma carta de crédito", "qual a central de atendimento",
+                  "preciso de uma compra rápida", "Quero um Corolla Cross"):
+        assert normalizar_nomes(frase) == frase

@@ -58,7 +58,15 @@ def perguntar_escolha(ficha: dict) -> bool:
     """
     falta = ficha_mod.pendentes(ficha)
     # parte faltando de algo que ele já contou (ex.: o ano da troca) vem antes: senão a resposta "É 2017" fica solta
-    return bool(falta) and falta[0] in ("interesse", "pagamento", "visita") and not ficha.get("modelos_interesse")
+    return bool(falta) and falta[0] in ("interesse", "pagamento", "visita") and not _escolheu_carro(ficha)
+
+
+def _escolheu_carro(ficha: dict) -> bool:
+    """Já citou UM carro do estoque (ex.: "o Kicks"). Marca com vários carros ou modelo que não temos não conta."""
+    for m in ficha.get("modelos_interesse") or []:
+        if len([c for c in repo.buscar_carros(texto=m) if repo.combina_texto(m, c)]) == 1:
+            return True
+    return False
 
 
 def _fecho(ficha: dict, ja_comentado: list[str] | None = None, unico: bool = False, dizer_unico: bool = True) -> str:
@@ -186,6 +194,18 @@ def sugestoes(ficha: dict, modelos_agora: list[str] | None = None, ja_comentado:
             faltando.append(m)
 
     if achados:  # ele nomeou o carro agora ("quanto tá o T-Cross?"): responde de novo, mesmo que já tenha mostrado
+        marcas = {repo._sem_acento(c["marca"]).strip() for c in achados}
+        if (pmax or pmin) and all(repo._sem_acento(p).strip() in marcas for p in modelos):
+            # Pediu a MARCA inteira depois de dar o valor: a lista respeita o limite de preço
+            cabem_marca = [c for c in achados if (not pmax or c["preco"] <= pmax) and (not pmin or c["preco"] >= pmin)]
+            if cabem_marca:
+                achados = cabem_marca
+            else:
+                alvo = pmax or pmin
+                perto = sorted(sorted(achados, key=lambda c: abs(c["preco"] - alvo))[:3], key=lambda c: c["preco"])
+                lista = "\n".join(_linha_carro(c) for c in perto)
+                return (f"Nenhum {', '.join(modelos)} do estoque cabe nesse valor. Diga isso com clareza e mostre estes, "
+                        f"que são os mais perto do valor dele:\n{lista}\n{fecho(perto)}")
         lista = "\n".join(_linha_carro(c) for c in achados[:MAX_CARROS])
         return (f"MOSTRE AGORA, nesta mensagem, o(s) carro(s) que o cliente pediu:\n{lista}\n"
                 f"{destaques(achados[:MAX_CARROS])}\n{fecho(achados[:MAX_CARROS], modelos)}")
