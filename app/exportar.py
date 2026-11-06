@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+from app.agente.ficha import motivo_legivel
 
 # Ficha plana usada no CSV/JSON genérico
 CAMPOS = [
@@ -102,7 +103,7 @@ def ficha_plana(lead: dict) -> dict:
         nome=nome,
         canal=CANAL_ROTULO.get(lead["canal"], lead["canal"]),
         status={"humano": "com vendedor", "bot": "em atendimento", "parado": "parado"}.get(lead["status"], lead["status"]),
-        motivo_transferencia=(transf.get("motivo") or "").replace("_", " ") or None,
+        motivo_transferencia=motivo_legivel(transf.get("motivo")) or None,
         resumo=transf.get("resumo"),
         titulo=titulo_negocio(ficha),
     )
