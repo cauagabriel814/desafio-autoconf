@@ -308,6 +308,9 @@ repita valores que só aparecem no contexto. Na dúvida, deixe o campo nulo.
   Se ele disser uma marca, modelo ou tipo, NÃO marque sem_preferencia.
 - nao_sabe: só o item que a atendente acabou de perguntar, se o cliente disser que não sabe.
 - Se ele disser que não sabe ou não quer informar algo que foi perguntado, coloque o item em nao_sabe.
+- "[Cliente enviou uma imagem: ...]" é a descrição de uma foto que ele mandou. Se ela mostra um carro com marca ou
+  modelo identificado (ex.: "um carro Chevrolet", "um Onix"), trate como se ele tivesse pedido esse carro:
+  coloque a marca ou o modelo em modelos_interesse. Não tire valor, ano, troca nem urgência da descrição.
 - proximo_passo só se ele aceitar algo concreto: visita, test drive, contato do vendedor.
 - transferir: preencha se a mensagem trouxer um destes motivos para passar a um vendedor agora:
   reclamacao (reclamação, cobrança, problema com compra anterior, Procon, insatisfação);
